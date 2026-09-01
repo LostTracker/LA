@@ -1,5 +1,7 @@
 # LostTracker
 
+Repo: https://github.com/LostTracker/LA
+
 A daily/weekly task tracker for Lost Ark — a roster x task grid that auto-resets on
 schedule, plus a gold-tracking dashboard.
 
