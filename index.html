@@ -138,6 +138,23 @@
   .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
   .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 
+  /* per-character task chooser */
+  details.char-tasks { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; background: var(--bg); }
+  details.char-tasks > summary { cursor: pointer; padding: 8px 12px; color: var(--muted); font-size: 13px; }
+  details.char-tasks > summary:hover { color: var(--text); }
+  details.char-tasks[open] > summary { border-bottom: 1px solid var(--line); }
+  details.char-tasks > *:not(summary) { margin: 10px 12px; }
+  .task-group h3 {
+    margin: 12px 0 6px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .8px; color: var(--gold); font-weight: 600;
+  }
+  .task-group { display: block; }
+  label.task-pick {
+    display: inline-flex; align-items: center; gap: 6px; width: 250px;
+    padding: 3px 0; color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  label.task-pick img { width: 16px; height: 16px; }
+
   .toast {
     position: fixed; bottom: 16px; right: 16px; background: var(--panel-2);
     border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px;
@@ -263,6 +280,9 @@ let state = null;
 let activeTab = "checklist";
 let saveTimer = null;
 let syncStatus = "idle";
+// Which character task-pickers are expanded. View state only, so it is kept out
+// of the saved document and re-applied after each re-render.
+const openCharPanels = new Set();
 
 /* ---------- utilities ---------- */
 
@@ -305,6 +325,11 @@ function defaultState() {
     tasks: [],
     // Keyed "taskId:characterId"; roster-scope tasks use the ROSTER stand-in.
     progress: {},
+    // Per-character opt-outs: { characterId: { taskId: false } }. Only
+    // exclusions are stored, so a newly added task is on everywhere by default
+    // and a newly imported character inherits the full eligible set.
+    charTasks: {},
+    seeded: false,
     resetHour: 6,
     resetDay: 3,          // Wednesday
     lastDaily: 0,
@@ -392,19 +417,40 @@ function applies(task, ch) {
   return ilvl >= (task.min || 0) && ilvl <= (task.max || 9999);
 }
 
+// Tracked = shown at all. Untracked tasks stay in the list so they can be
+// switched back on without losing their gold value.
+const isTracked = (t) => t.tracked !== false;
+
+// Whether this character actually runs this task: tracked, within its level
+// window, and not switched off for this character specifically.
+function enabledFor(task, ch) {
+  if (!isTracked(task) || !applies(task, ch)) return false;
+  const overrides = state.charTasks[ch.id];
+  return !(overrides && overrides[task.id] === false);
+}
+
+function setCharTask(charId, taskId, on) {
+  if (on) {
+    if (state.charTasks[charId]) delete state.charTasks[charId][taskId];
+  } else {
+    if (!state.charTasks[charId]) state.charTasks[charId] = {};
+    state.charTasks[charId][taskId] = false;
+  }
+}
+
 function goldTotals() {
   let earned = 0;
   let potential = 0;
   for (const t of state.tasks) {
     const gold = Number(t.gold) || 0;
-    if (!gold) continue;
+    if (!gold || !isTracked(t)) continue;
     if (t.scope === "roster") {
       earned += gold * progressOf(t.id, ROSTER);
       potential += gold * t.reps;
       continue;
     }
     for (const ch of goldChars()) {
-      if (!applies(t, ch)) continue;
+      if (!enabledFor(t, ch)) continue;
       earned += gold * progressOf(t.id, ch.id);
       potential += gold * t.reps;
     }
@@ -416,13 +462,14 @@ function completion() {
   let done = 0;
   let total = 0;
   for (const t of state.tasks) {
+    if (!isTracked(t)) continue;
     if (t.scope === "roster") {
       total += t.reps;
       done += Math.min(progressOf(t.id, ROSTER), t.reps);
       continue;
     }
     for (const ch of state.characters) {
-      if (!applies(t, ch)) continue;
+      if (!enabledFor(t, ch)) continue;
       total += t.reps;
       done += Math.min(progressOf(t.id, ch.id), t.reps);
     }
@@ -526,7 +573,7 @@ function addTasks(predicate, label) {
     if (state.tasks.some((t) => t.name === c.name)) continue;
     state.tasks.push({
       id: uid(), name: c.name, icon: c.icon, freq: c.freq, scope: c.scope,
-      reps: c.reps, min: c.min, max: c.max, gold: 0,
+      reps: c.reps, min: c.min, max: c.max, gold: 0, tracked: true,
     });
     added++;
   }
@@ -587,8 +634,12 @@ function taskLabel(t) {
     esc(t.name) + "</th>";
 }
 
-function cellFor(t, charId, eligible) {
-  if (!eligible) return '<td class="na"><span>—</span></td>';
+// "—" means the character's item level puts the task out of range; "·" means
+// you switched it off for that character. Different reasons, different marks.
+function cellFor(t, ch) {
+  if (!applies(t, ch)) return '<td class="na"><span>—</span></td>';
+  if (!enabledFor(t, ch)) return '<td class="na"><span title="Not tracked for this character">·</span></td>';
+  const charId = ch.id;
   const n = progressOf(t.id, charId);
   const cls = n >= t.reps ? "complete" : n > 0 ? "partial" : "";
   const coin = Number(t.gold) > 0 ? '<span class="coin">◈</span>' : "";
@@ -617,7 +668,11 @@ function renderChecklist() {
   html += "</tr></thead><tbody>";
 
   for (const sec of SECTIONS) {
-    const tasks = state.tasks.filter((t) => t.freq === sec.freq && t.scope === sec.scope);
+    const tasks = state.tasks.filter((t) =>
+      t.freq === sec.freq && t.scope === sec.scope && isTracked(t) &&
+      // Hide a row entirely when no character runs it — otherwise the grid
+      // fills with rows of dashes for content nobody is at the level for.
+      (t.scope === "roster" || chars.some((c) => enabledFor(t, c))));
     if (!tasks.length) continue;
     html += '<tr class="section"><th colspan="' + (chars.length + 1) + '">' + sec.label + "</th></tr>";
 
@@ -631,7 +686,7 @@ function renderChecklist() {
           '<button class="cell ' + cls + '" data-task="' + t.id + '" data-char="' + ROSTER + '"' +
           ' title="Click to advance, right-click to step back">' + n + " / " + t.reps + "</button></td>";
       } else {
-        for (const c of chars) html += cellFor(t, c.id, applies(t, c));
+        for (const c of chars) html += cellFor(t, c);
       }
       html += "</tr>";
     }
@@ -765,6 +820,9 @@ function renderRoster() {
   if (!state.characters.length) html += '<p class="empty">No characters yet.</p>';
   else {
     for (const c of state.characters) {
+      const eligible = state.tasks.filter((t) => isTracked(t) && t.scope === "character" && applies(t, c));
+      const on = eligible.filter((t) => enabledFor(t, c)).length;
+
       html += '<div class="row" data-char="' + c.id + '">' +
         '<input type="text" class="grow" value="' + esc(c.name) + '" data-field="name" placeholder="Name">' +
         '<input type="text" value="' + esc(c.cls || "") + '" data-field="cls" placeholder="Class" style="width:140px">' +
@@ -772,6 +830,31 @@ function renderRoster() {
         '<label class="muted"><input type="checkbox" data-field="countsGold"' +
           (c.countsGold ? " checked" : "") + "> counts gold</label>" +
         '<button class="btn danger" data-remove-char="' + c.id + '">Remove</button></div>';
+
+      html += '<details class="char-tasks" data-char-tasks="' + c.id + '"' +
+        (openCharPanels.has(c.id) ? " open" : "") + "><summary>" +
+        on + " of " + eligible.length + " tasks tracked for " + esc(c.name) + "</summary>";
+
+      if (!eligible.length) {
+        html += '<p class="empty">No tasks match this character\'s item level yet.</p>';
+      } else {
+        html += '<div class="add-row" style="margin:0 0 8px">' +
+          '<button class="btn" data-char-all="' + c.id + '">Select all</button>' +
+          '<button class="btn" data-char-none="' + c.id + '">Select none</button></div>';
+        for (const sec of SECTIONS) {
+          const inSec = eligible.filter((t) => t.freq === sec.freq && t.scope === sec.scope);
+          if (!inSec.length) continue;
+          html += '<div class="task-group"><h3>' + sec.label + "</h3>";
+          for (const t of inSec) {
+            html += '<label class="task-pick"><input type="checkbox" data-pick-task="' + t.id +
+              '" data-pick-char="' + c.id + '"' + (enabledFor(t, c) ? " checked" : "") + "> " +
+              (t.icon ? '<img src="' + ICON_BASE + esc(t.icon) + '" alt="">' : "") +
+              esc(t.name) + '<span class="muted"> ·' + t.min + "</span></label>";
+          }
+          html += "</div>";
+        }
+      }
+      html += "</details>";
     }
   }
   return html + '<div class="add-row"><input type="text" id="new-char" class="grow" placeholder="Character name">' +
@@ -790,10 +873,13 @@ function renderSetup() {
   html += '<div class="panel"><h2>Tasks</h2>';
   if (!state.tasks.length) html += '<p class="empty">No tasks yet.</p>';
   else {
-    html += '<table class="plain"><tr><th>Task</th><th>Frequency</th><th>Scope</th>' +
+    html += '<table class="plain"><tr><th>Tracked</th><th>Task</th><th>Frequency</th><th>Scope</th>' +
       '<th class="num">Reps</th><th class="num">Min ilvl</th><th class="num">Gold each</th><th></th></tr>';
     for (const t of state.tasks) {
-      html += '<tr data-task-row="' + t.id + '"><td>' +
+      html += '<tr data-task-row="' + t.id + '">' +
+        '<td><input type="checkbox" data-field="tracked"' + (isTracked(t) ? " checked" : "") +
+        ' title="Untick to hide this task from the grid entirely"></td><td' +
+        (isTracked(t) ? "" : ' class="muted"') + ">" +
         (t.icon ? '<img src="' + ICON_BASE + esc(t.icon) + '" alt="" style="width:16px;height:16px;vertical-align:-3px;margin-right:6px">' : "") +
         esc(t.name) + '</td><td class="muted">' + esc(t.freq) + '</td><td class="muted">' + esc(t.scope) +
         '</td><td class="num muted">' + t.reps + '</td><td class="num muted">' + t.min + "</td>" +
@@ -877,6 +963,27 @@ view.addEventListener("click", (e) => {
 
   if (t.id === "import-roster") { importRoster(); return; }
 
+  if (t.dataset.charAll || t.dataset.charNone) {
+    const charId = t.dataset.charAll || t.dataset.charNone;
+    const ch = state.characters.find((c) => c.id === charId);
+    const on = !!t.dataset.charAll;
+    for (const task of state.tasks) {
+      if (task.scope !== "character" || !isTracked(task) || !applies(task, ch)) continue;
+      setCharTask(charId, task.id, on);
+    }
+    openCharPanels.add(charId);
+    save(); render(); return;
+  }
+
+  const summary = t.closest("details.char-tasks > summary");
+  if (summary) {
+    // <details> toggles itself; just remember the state for the next render.
+    const id = summary.parentElement.dataset.charTasks;
+    if (summary.parentElement.open) openCharPanels.delete(id);
+    else openCharPanels.add(id);
+    return;
+  }
+
   if (t.id === "add-char") {
     const input = document.getElementById("new-char");
     const name = input.value.trim();
@@ -956,11 +1063,26 @@ view.addEventListener("change", (e) => {
     save(); render(); return;
   }
 
+  if (t.dataset.pickTask) {
+    setCharTask(t.dataset.pickChar, t.dataset.pickTask, t.checked);
+    save();
+    // Re-render so the summary count and the grid both catch up, keeping this
+    // character's panel open.
+    openCharPanels.add(t.dataset.pickChar);
+    render();
+    return;
+  }
+
   const taskRow = t.closest("[data-task-row]");
   if (taskRow && t.dataset.field === "gold") {
     const task = state.tasks.find((x) => x.id === taskRow.dataset.taskRow);
     if (task) task.gold = Math.max(0, parseInt(t.value, 10) || 0);
     save(); return;
+  }
+  if (taskRow && t.dataset.field === "tracked") {
+    const task = state.tasks.find((x) => x.id === taskRow.dataset.taskRow);
+    if (task) task.tracked = t.checked;
+    save(); render(); return;
   }
 
   const charRow = t.closest("[data-char]");
@@ -976,6 +1098,22 @@ view.addEventListener("change", (e) => {
 
 (async function init() {
   await loadState();
+
+  // Seed the whole catalogue once, so everything is present to pick from
+  // rather than needing to be added first. The flag means clearing the list
+  // deliberately is respected instead of being undone on the next load.
+  if (!state.seeded && !state.tasks.length) {
+    for (const c of TASK_CATALOGUE) {
+      state.tasks.push({
+        id: uid(), name: c.name, icon: c.icon, freq: c.freq, scope: c.scope,
+        reps: c.reps, min: c.min, max: c.max, gold: 0, tracked: true,
+      });
+    }
+    orderTasks();
+    state.seeded = true;
+    save();
+  }
+
   if (!state.lastDaily) state.lastDaily = lastDailyBoundary(state.resetHour);
   if (!state.lastWeekly) state.lastWeekly = lastWeeklyBoundary(state.resetDay, state.resetHour);
   if (applyResets()) save();
