@@ -9,10 +9,9 @@ database_id = "55ddd07a-8180-42f2-ae61-b39c0e4096be"
 
 [vars]
 # Origin the frontend is served from. Must match exactly (scheme + host, no
-# trailing slash) or the browser will reject the credentialed CORS response.
+# trailing slash) or the browser rejects the CORS response.
 APP_ORIGIN = "https://losttracker.github.io"
-# Not a secret; safe to commit. Fill in from the Discord Developer Portal.
-DISCORD_CLIENT_ID = ""
 
-# Secret, set out of band and never committed:
-#   npx wrangler secret put DISCORD_CLIENT_SECRET
+# Secret, set out of band and never committed. This is the only thing standing
+# between the internet and your tracker, so make it long and random:
+#   npx wrangler secret put APP_KEY

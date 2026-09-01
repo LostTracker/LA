@@ -2,68 +2,74 @@
 
 Repo: https://github.com/LostTracker/LA
 
-A daily/weekly task tracker for Lost Ark — a roster x task grid that auto-resets on
-schedule, plus a gold-tracking dashboard.
+A personal daily/weekly task tracker for Lost Ark — a roster x task grid that auto-resets
+on schedule, plus a gold-tracking dashboard. Rosters import from lostark.bible.
 
 ## Status
 
 | Piece | State |
 |---|---|
-| D1 database | **Live.** `losttracker-db` (`55ddd07a-8180-42f2-ae61-b39c0e4096be`), schema applied |
-| Worker API | **Written, builds clean, not yet deployed.** Needs the Discord credentials first |
-| Frontend | **Built.** `index.html`, works standalone; syncs once an API URL is set |
-| Discord OAuth app | Registration pending (Client ID + Secret) |
-| LOA Logs importer | Not started; needs a real `encounters.db` to design against |
+| D1 database | **Live.** `losttracker-db` (`55ddd07a-8180-42f2-ae61-b39c0e4096be`), single `state` table |
+| Worker API | **Written, builds clean, not deployed.** Needs `APP_KEY` set |
+| Frontend | **Built.** `index.html` — checklist, dashboard, roster, setup |
+| Roster import | **Built.** Parser verified against lostark.bible's live markup; end-to-end untested until deploy |
+
+## Design
+
+Single-user. There are no accounts, no OAuth, and no sessions: every request carries a
+shared key checked against the `APP_KEY` secret. That is the entire access model, and it
+is only adequate because this serves one person. Treat the key like a password.
+
+All tracker data lives in D1. Nothing is cached on the client — the browser stores only
+the API URL and key — so there is no offline mode by design.
 
 ## API
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/auth/discord` | Redirect to Discord's consent screen (alias: `/auth/login`) |
-| GET | `/auth/callback` | Exchange the code, open a session, bounce back to the app |
-| POST | `/auth/logout` | Drop the session |
-| GET | `/api/me` | The signed-in user, or 401 |
-| GET | `/api/state` | This user's saved tracker state (`null` if never saved) |
+| GET | `/api/state` | The tracker state (`null` before the first save) |
 | PUT | `/api/state` | Replace it with the posted JSON object |
+| GET | `/api/roster?name=X&region=CE\|NA` | Import a roster from lostark.bible |
 
-The whole tracker state is stored as one JSON blob per user in `app_state`. That keeps the
-schema indifferent to how the frontend organizes roster, tasks, and progress — which is
-still in flux — at the cost of no server-side querying of individual tasks.
+## Roster import
 
-Sessions are cookie-based: a random 256-bit token, of which only the SHA-256 hash is
-stored, so a leaked database dump cannot be replayed as a login. OAuth uses a `state`
-cookie to reject forged callbacks.
+lostark.bible publishes rosters at `/character/{REGION}/{NAME}/roster` as server-rendered
+HTML, readable anonymously — no OAuth and no dependence on their hashed
+`/_app/remote/<id>` endpoints, which change on every deploy of their site. The Worker
+fetches that page and parses out each character's name and item level.
+
+Caveats worth knowing:
+
+- It is still HTML parsing, so a markup change on their side breaks it. The Worker returns
+  an explicit error in that case rather than importing an empty roster.
+- **Class is not imported** — the roster listing renders it as an unlabelled inline SVG.
+  Class doesn't change, so it's set by hand once.
+- Import matches on character name, so classes, gold flags, and progress survive a
+  refresh. Characters missing from the roster are left alone, never deleted.
+- Responses are cached for 5 minutes so repeated refreshes don't hammer their site.
 
 ## Layout
 
-- `worker.js` — the API: Discord OAuth + state persistence
-- `schema.sql` — mirrors the schema actually deployed to D1
+- `index.html` — the single-file frontend
+- `worker.js` — the API
+- `schema.sql` — mirrors the schema deployed to D1
 - `wrangler.toml` — Worker config, bound to the live database
-- `index.html` — the single-file frontend: Checklist, Dashboard, Roster, Setup
 
 ## Deploying
 
-Node 24 LTS is installed, so wrangler runs locally and `wrangler.toml` already points at
-the real database:
-
 ```
 npx wrangler login                                              # once
-npx wrangler deploy                                             # deploy the Worker
+npx wrangler secret put APP_KEY                                 # long and random
+npx wrangler deploy
 npx wrangler tail                                               # live logs
 npx wrangler d1 execute losttracker-db --remote --file=schema.sql
 ```
 
-Before the first real deploy:
-
-1. Set `DISCORD_CLIENT_ID` in `wrangler.toml` (not a secret, safe to commit).
-2. `npx wrangler secret put DISCORD_CLIENT_SECRET` — never put this in source or a chat.
-3. Add `https://<worker-host>/auth/callback` as a redirect URI in the Discord app.
-4. Set `APP_ORIGIN` to wherever the frontend is actually served from. It must match the
-   browser's `Origin` exactly, or the credentialed CORS response is rejected.
+Then open the app, go to Setup, and enter the Worker URL and the same key. Set
+`APP_ORIGIN` in `wrangler.toml` to wherever the frontend is served from — it must match
+the browser's `Origin` exactly.
 
 ## Notes
 
-- The app and API live on different origins, so the session cookie is `SameSite=None;
-  Secure`. Both sides must be HTTPS.
 - Task names, raid names, and gold values are intentionally not baked in — Lost Ark's
-  raid lineup and gold rewards change with patches. They're configured in the app's Setup tab.
+  raid lineup and gold rewards change with patches. They're configured on the Setup tab.

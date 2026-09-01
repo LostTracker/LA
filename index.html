@@ -251,21 +251,20 @@
 /* ============================================================
    LostTracker — single-file frontend.
 
-   Works standalone with no backend: state lives in localStorage
-   until an API base URL is configured on the Setup tab, at which
-   point it syncs to the Worker instead and follows your Discord
-   sign-in.
+   Single-user. All tracker data lives in the Worker's D1 database,
+   never on this machine; the only things kept locally are the API
+   URL and key, which this browser needs in order to reach it.
    ============================================================ */
 
-const LS_STATE = "losttracker.state";
 const LS_API = "losttracker.api";
+const LS_KEY = "losttracker.key";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 let state = null;
-let user = null;          // signed-in Discord user, or null
 let activeTab = "checklist";
 let saveTimer = null;
+let syncStatus = "idle";  // idle | saving | saved | error | unconfigured
 
 /* ---------- utilities ---------- */
 
@@ -292,6 +291,16 @@ const store = {
 };
 
 const apiBase = () => (store.get(LS_API) || "").replace(/\/+$/, "");
+const apiKey = () => store.get(LS_KEY) || "";
+const configured = () => !!apiBase() && !!apiKey();
+
+// Every call carries the shared key; there is no session to establish.
+function api(path, options) {
+  return fetch(apiBase() + path, {
+    ...options,
+    headers: { "X-LostTracker-Key": apiKey(), ...((options && options.headers) || {}) },
+  });
+}
 
 function toast(msg) {
   const el = document.getElementById("toast");
@@ -317,6 +326,9 @@ function defaultState() {
     resetDay: 3, // Wednesday
     lastDaily: 0,
     lastWeekly: 0,
+    // Which lostark.bible roster to import from.
+    bibleName: "",
+    bibleRegion: "CE",
   };
 }
 
@@ -382,53 +394,117 @@ function untilText(date) {
 /* ---------- persistence ---------- */
 
 async function loadState() {
-  const base = apiBase();
+  state = defaultState();
 
-  if (base) {
-    try {
-      const meRes = await fetch(base + "/api/me", { credentials: "include" });
-      if (meRes.ok) {
-        user = (await meRes.json()).user;
-        const stateRes = await fetch(base + "/api/state", { credentials: "include" });
-        if (stateRes.ok) {
-          const body = await stateRes.json();
-          state = { ...defaultState(), ...(body.data || {}) };
-          return;
-        }
-      }
-    } catch (err) {
-      // Worker unreachable — fall through to local storage rather than
-      // blocking the app on a backend that is optional.
-      toast("Could not reach the API — working locally");
-    }
+  if (!configured()) {
+    syncStatus = "unconfigured";
+    return;
   }
 
   try {
-    state = { ...defaultState(), ...JSON.parse(store.get(LS_STATE) || "{}") };
+    const res = await api("/api/state");
+    if (res.status === 401) {
+      syncStatus = "error";
+      toast("The API rejected that key");
+      return;
+    }
+    if (!res.ok) {
+      syncStatus = "error";
+      toast("Could not load (" + res.status + ")");
+      return;
+    }
+    const body = await res.json();
+    state = { ...defaultState(), ...(body.data || {}) };
+    syncStatus = "saved";
   } catch (err) {
-    state = defaultState();
+    // Nothing is cached locally by design, so there is no offline mode:
+    // say so plainly instead of silently showing an empty tracker.
+    syncStatus = "error";
+    toast("Could not reach the API");
   }
 }
 
 function save() {
+  if (!configured()) return;
+  syncStatus = "saving";
+  renderAccount();
+
   // Debounced: checkbox spamming shouldn't mean a request per click.
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
-    store.set(LS_STATE, JSON.stringify(state));
-    const base = apiBase();
-    if (!base || !user) return;
     try {
-      const res = await fetch(base + "/api/state", {
+      const res = await api("/api/state", {
         method: "PUT",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(state),
       });
+      syncStatus = res.ok ? "saved" : "error";
       if (!res.ok) toast("Save failed (" + res.status + ")");
     } catch (err) {
+      syncStatus = "error";
       toast("Save failed — offline?");
     }
+    renderAccount();
   }, 600);
+}
+
+/* ---------- roster import ---------- */
+
+async function importRoster() {
+  if (!configured()) {
+    toast("Set the API URL and key on the Setup tab first");
+    return;
+  }
+  const name = (state.bibleName || "").trim();
+  if (!name) {
+    toast("Enter a character name to import from");
+    return;
+  }
+
+  toast("Importing…");
+  let body;
+  try {
+    const res = await api(
+      "/api/roster?name=" + encodeURIComponent(name) + "&region=" + encodeURIComponent(state.bibleRegion)
+    );
+    body = await res.json();
+    if (!res.ok) {
+      toast(body.error || "Import failed (" + res.status + ")");
+      return;
+    }
+  } catch (err) {
+    toast("Could not reach the API");
+    return;
+  }
+
+  // Match on name so existing characters keep their class, gold flag, and
+  // this week's progress; only the item level is refreshed.
+  let added = 0;
+  let updated = 0;
+  for (const incoming of body.characters) {
+    const existing = state.characters.find(
+      (c) => c.name.toLowerCase() === incoming.name.toLowerCase()
+    );
+    if (existing) {
+      if (String(existing.ilvl) !== String(incoming.ilvl)) updated++;
+      existing.ilvl = incoming.ilvl;
+    } else {
+      state.characters.push({
+        id: uid(),
+        name: incoming.name,
+        cls: "",
+        ilvl: incoming.ilvl,
+        countsGold: false,
+      });
+      added++;
+    }
+  }
+  // Characters dropped from the bible roster are left alone rather than
+  // deleted, so an import can never wipe progress.
+  state.characters.sort((a, b) => (Number(b.ilvl) || 0) - (Number(a.ilvl) || 0));
+  save();
+  render();
+  toast(added + " added, " + updated + " updated");
 }
 
 /* ---------- derived numbers ---------- */
@@ -485,7 +561,14 @@ function render() {
   });
   renderAccount();
   const view = document.getElementById("view");
-  view.innerHTML = ({
+  // Without a URL and key there is nothing to read or write, so say that once
+  // rather than letting every tab render a misleading empty state.
+  const banner = configured()
+    ? ""
+    : '<div class="panel" style="border-color:var(--gold)">' +
+      "<h2>Not connected</h2><p class=\"hint\" style=\"margin:0\">Tracker data lives in the Worker's " +
+      "database. Add the API URL and key on the Setup tab to load it.</p></div>";
+  view.innerHTML = banner + ({
     checklist: renderChecklist,
     dashboard: renderDashboard,
     roster: renderRoster,
@@ -495,14 +578,17 @@ function render() {
 
 function renderAccount() {
   const el = document.getElementById("account");
-  if (!apiBase()) {
-    el.innerHTML = '<span title="Set an API URL on the Setup tab to sync across devices">Local only</span>';
-  } else if (user) {
-    el.innerHTML = "<span>" + esc(user.username) + "</span>" +
-      '<button class="btn" id="logout">Sign out</button>';
-  } else {
-    el.innerHTML = '<button class="btn primary" id="login">Sign in with Discord</button>';
-  }
+  const text = {
+    unconfigured: "Not connected — see Setup",
+    saving: "Saving…",
+    saved: "Saved",
+    error: "Sync error",
+    idle: "",
+  }[syncStatus];
+  const colour = syncStatus === "error" ? "var(--danger)"
+    : syncStatus === "saved" ? "var(--teal)"
+    : "var(--muted)";
+  el.innerHTML = '<span style="color:' + colour + '">' + esc(text) + "</span>";
 }
 
 function renderChecklist() {
@@ -632,7 +718,21 @@ function renderDashboard() {
 }
 
 function renderRoster() {
-  let html = '<div class="panel"><h2>Characters</h2>' +
+  let html = '<div class="panel"><h2>Import from lostark.bible</h2>' +
+    '<p class="hint">Pulls every character on the roster this character belongs to, then refreshes ' +
+    "item levels. Matching is by name, so classes, gold flags, and progress are kept. " +
+    "Class isn't imported — lostark.bible renders it as an unlabelled icon — so set it once below.</p>" +
+    '<div class="add-row">' +
+      '<input type="text" id="bible-name" class="grow" placeholder="Any character on your roster" value="' +
+        esc(state.bibleName || "") + '">' +
+      '<select id="bible-region">' +
+        '<option value="CE"' + (state.bibleRegion === "CE" ? " selected" : "") + ">Central Europe</option>" +
+        '<option value="NA"' + (state.bibleRegion === "NA" ? " selected" : "") + ">North America</option>" +
+      "</select>" +
+      '<button class="btn primary" id="import-roster">Refresh roster</button>' +
+    "</div></div>";
+
+  html += '<div class="panel"><h2>Characters</h2>' +
     '<p class="hint">"Counts gold" marks the characters whose raid rewards feed the weekly gold total — ' +
     "Lost Ark caps that at six, but this doesn't enforce a number.</p>";
 
@@ -713,12 +813,21 @@ function renderSetup() {
   html += '<div class="add-row"><input type="text" id="new-raid" class="grow" placeholder="Raid name">' +
     '<button class="btn primary" id="add-raid">Add raid</button></div></div>';
 
-  html += '<div class="panel"><h2>Sync</h2>' +
-    '<p class="hint">Leave this empty to keep everything in this browser. Point it at the deployed ' +
-    "losttracker-api Worker to sync across devices behind a Discord sign-in.</p>" +
-    '<div class="add-row"><input type="text" id="api-url" class="grow" placeholder="https://losttracker-api.<subdomain>.workers.dev" value="' +
-      esc(apiBase()) + '">' +
-    '<button class="btn primary" id="save-api">Save</button></div>' +
+  html += '<div class="panel"><h2>Connection</h2>' +
+    '<p class="hint">All tracker data lives in the Worker\'s database, not on this machine. ' +
+    "Only the URL and key below are stored in this browser, so enter them once per device. " +
+    "The key is whatever you set as the Worker's APP_KEY secret.</p>" +
+    '<div class="add-row">' +
+      '<input type="text" id="api-url" class="grow" placeholder="https://losttracker-api.<subdomain>.workers.dev" value="' +
+        esc(apiBase()) + '">' +
+    "</div>" +
+    '<div class="add-row">' +
+      '<input type="password" id="api-key" class="grow" placeholder="APP_KEY" value="' + esc(apiKey()) + '">' +
+      '<button class="btn primary" id="save-api">Save &amp; reload</button>' +
+    "</div></div>";
+
+  html += '<div class="panel"><h2>Backup</h2>' +
+    '<p class="hint">A copy of everything, in case a bad import or a mistaken reset needs undoing.</p>' +
     '<div class="add-row"><button class="btn" id="export">Export JSON</button>' +
     '<button class="btn" id="import">Import JSON</button></div></div>';
 
@@ -732,19 +841,6 @@ document.getElementById("tabs").addEventListener("click", (e) => {
   if (!btn) return;
   activeTab = btn.dataset.tab;
   render();
-});
-
-document.getElementById("account").addEventListener("click", async (e) => {
-  if (e.target.id === "login") {
-    window.location.href = apiBase() + "/auth/discord";
-  }
-  if (e.target.id === "logout") {
-    try {
-      await fetch(apiBase() + "/auth/logout", { method: "POST", credentials: "include" });
-    } catch (err) { /* signing out locally is enough */ }
-    user = null;
-    render();
-  }
 });
 
 const view = document.getElementById("view");
@@ -878,10 +974,16 @@ view.addEventListener("click", (e) => {
   // ---- setup: sync + import/export
   if (t.id === "save-api") {
     const url = document.getElementById("api-url").value.trim().replace(/\/+$/, "");
-    if (url) store.set(LS_API, url);
-    else store.remove(LS_API);
+    const key = document.getElementById("api-key").value.trim();
+    if (url) store.set(LS_API, url); else store.remove(LS_API);
+    if (key) store.set(LS_KEY, key); else store.remove(LS_KEY);
     toast("Saved — reloading");
     setTimeout(() => window.location.reload(), 600);
+    return;
+  }
+
+  if (t.id === "import-roster") {
+    importRoster();
     return;
   }
   if (t.id === "export") {
@@ -922,6 +1024,18 @@ view.addEventListener("change", (e) => {
     if (t.checked) state[t.dataset.kind][t.dataset.key] = true;
     else delete state[t.dataset.kind][t.dataset.key];
     t.closest("td").classList.toggle("done", t.checked);
+    save();
+    return;
+  }
+
+  // ---- roster import source
+  if (t.id === "bible-name") {
+    state.bibleName = t.value.trim();
+    save();
+    return;
+  }
+  if (t.id === "bible-region") {
+    state.bibleRegion = t.value;
     save();
     return;
   }
