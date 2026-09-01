@@ -28,9 +28,17 @@ function corsHeaders(env, request) {
     'Access-Control-Allow-Headers': 'Content-Type, ' + KEY_HEADER,
     Vary: 'Origin',
   };
-  // No credentials are involved, but echoing a single allowed origin keeps the
-  // key from being usable by any random page the browser happens to load.
-  if (origin && env.APP_ORIGIN && origin === env.APP_ORIGIN) {
+
+  // APP_ORIGIN is a comma-separated allowlist. "null" is the origin a page
+  // opened straight off disk (file://) sends — such pages do send an Origin
+  // header, they just send the literal string "null" — so it has to be listed
+  // explicitly for the app to work without being served over HTTP.
+  const allowed = (env.APP_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  if (origin && allowed.includes(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
   return headers;

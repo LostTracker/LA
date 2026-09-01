@@ -8,10 +8,11 @@ database_name = "losttracker-db"
 database_id = "55ddd07a-8180-42f2-ae61-b39c0e4096be"
 
 [vars]
-# Origin the frontend is served from. Must match exactly (scheme + host, no
-# trailing slash) or the browser rejects the CORS response.
-APP_ORIGIN = "https://losttracker.github.io"
+# Comma-separated allowlist of origins the frontend is served from. Each must
+# match the browser's Origin header exactly (scheme + host, no trailing slash).
+# "null" is what a page opened directly off disk (file://) sends — keep it while
+# you run index.html locally, drop it once the app is served over HTTP.
+APP_ORIGIN = "https://losttracker.github.io,null"
 
-# Secret, set out of band and never committed. This is the only thing standing
-# between the internet and your tracker, so make it long and random:
+# Secret, set out of band and never committed:
 #   npx wrangler secret put APP_KEY
