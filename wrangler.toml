@@ -1,0 +1,12 @@
+name = "losttracker-api"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "roster-watch-db"
+database_id = "e63040b0-8df9-472c-a8c6-578eb98ab42f"
+
+# Secrets (set via `wrangler secret put`, or the Cloudflare dashboard):
+#   DISCORD_CLIENT_ID
+#   DISCORD_CLIENT_SECRET
