@@ -10,9 +10,9 @@ on schedule, plus a gold-tracking dashboard. Rosters import from lostark.bible.
 | Piece | State |
 |---|---|
 | D1 database | **Live.** `losttracker-db` (`55ddd07a-8180-42f2-ae61-b39c0e4096be`), single `state` table |
-| Worker API | **Written, builds clean, not deployed.** Needs `APP_KEY` set |
+| Worker API | **Deployed.** https://losttracker-api.seraph0226.workers.dev — `APP_KEY` set |
 | Frontend | **Built.** `index.html` — checklist, dashboard, roster, setup |
-| Roster import | **Built.** Parser verified against lostark.bible's live markup; end-to-end untested until deploy |
+| Roster import | **Working.** Verified live against the deployed Worker (13 characters returned) |
 
 ## Design
 
