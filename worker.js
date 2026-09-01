@@ -167,6 +167,60 @@ function parseRoster(html, region) {
   return out;
 }
 
+const LA_CLASSES = [
+  "Berserker", "Destroyer", "Gunlancer", "Paladin", "Slayer", "Valkyrie", "Arcanist",
+  "Summoner", "Bard", "Sorceress", "Wardancer", "Scrapper", "Soulfist", "Glaivier",
+  "Striker", "Breaker", "Deathblade", "Shadowhunter", "Reaper", "Souleater",
+  "Sharpshooter", "Deadeye", "Artillerist", "Machinist", "Gunslinger", "Aeromancer",
+  "Artist", "Wildsoul",
+];
+
+/**
+ * Reads one character's own page.
+ *
+ * This works for characters hidden from the owner's public roster listing,
+ * which the roster page omits entirely — so it is the way to fill in the rest
+ * of a roster. The class sits in a <p> whose whole text is the class name;
+ * matching on that avoids false hits like the skill "Standing Striker".
+ */
+async function handleCharacter(request, env) {
+  const url = new URL(request.url);
+  const name = (url.searchParams.get("name") || "").trim();
+  const region = (url.searchParams.get("region") || "").trim().toUpperCase();
+
+  if (!name || name.length > 32 || /[/?#]/.test(name)) {
+    return json({ error: "Give a character name." }, 400, env, request);
+  }
+  if (region !== "CE" && region !== "NA") {
+    return json({ error: "Region must be CE or NA." }, 400, env, request);
+  }
+
+  const target = BIBLE + "/character/" + region + "/" + encodeURIComponent(name);
+  let res;
+  try {
+    res = await fetch(target, {
+      headers: { Accept: "text/html,application/xhtml+xml", "User-Agent": UA },
+      cf: { cacheTtl: 300, cacheEverything: false },
+    });
+  } catch (err) {
+    return json({ error: "Could not reach lostark.bible." }, 502, env, request);
+  }
+  if (res.status === 404) return json({ error: "No such character." }, 404, env, request);
+  if (!res.ok) return json({ error: "lostark.bible returned HTTP " + res.status + "." }, 502, env, request);
+
+  const html = await res.text();
+  let cls = null;
+  const pTags = html.match(/<p[^>]*>[^<]{3,20}<\/p>/g) || [];
+  for (const p of pTags) {
+    const text = p.replace(/<[^>]*>/g, "").trim();
+    if (LA_CLASSES.includes(text)) { cls = text; break; }
+  }
+
+  // Deliberately no item level: the first plausible figure on the page is not
+  // reliably the character's, and /api/roster already reports it accurately.
+  return json({ name, class: cls, source: target }, 200, env, request);
+}
+
 async function handleRoster(request, env) {
   const url = new URL(request.url);
   const name = (url.searchParams.get('name') || '').trim();
@@ -269,6 +323,7 @@ export default {
     }
 
     if (path === '/api/roster' && request.method === 'GET') return handleRoster(request, env);
+    if (path === '/api/character' && request.method === 'GET') return handleCharacter(request, env);
 
     if (path === '/api/state') {
       if (request.method === 'GET') return handleGetState(request, env);

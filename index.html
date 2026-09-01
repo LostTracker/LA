@@ -45,6 +45,8 @@
   .account { font-size: 13px; color: var(--muted); }
 
   main { padding: 16px; max-width: 1600px; margin: 0 auto; }
+  /* The checklist is a wide table, so it gets the whole window and no chrome. */
+  body.checklist main { max-width: none; padding: 10px 12px; }
 
   .panel {
     background: var(--panel); border: 1px solid var(--line);
@@ -90,12 +92,12 @@
   th.task-col.drop-below { box-shadow: inset 0 -2px 0 0 var(--teal); }
 
   thead th.char-col {
-    background: #1b2233; font-size: 12px; white-space: nowrap; font-weight: 600;
-    padding: 8px 10px; min-width: 108px; text-align: center; color: #e8ecf7;
+    background: #1b2233; font-size: 14px; white-space: nowrap; font-weight: 600;
+    padding: 9px 10px; min-width: 114px; text-align: center; color: #e8ecf7;
   }
   thead th.char-col img { width: 20px; height: 20px; vertical-align: -5px; margin-right: 5px; opacity: .85; }
-  .class-icon { vertical-align: -5px; margin-right: 6px; filter: brightness(1.6); }
-  thead th.char-col .ilvl { color: #aab3c9; font-weight: 400; }
+  .class-icon { vertical-align: -6px; margin-right: 6px; }
+  thead th.char-col .ilvl { color: #aab3c9; font-weight: 400; font-size: 12px; }
   thead th.char-col .gold-flag { color: var(--gold); }
 
   /* Section bands run the full width with the label centred, matching the
@@ -144,13 +146,22 @@
   }
   .mode:hover { border-color: var(--gold); }
 
+  .box {
+    position: absolute; left: 31px; top: 50%; transform: translateY(-50%);
+    border: 1px solid #46507a; background: #1d2340; color: #59617f;
+    border-radius: 3px; font: 600 9px/1 inherit; padding: 3px 3px; cursor: pointer;
+  }
+  .box.on { color: var(--gold); border-color: var(--gold); }
+  .box:hover { border-color: var(--gold); }
+
   /* Rest bonus bar, hugging the bottom edge of the cell. */
   .rest {
     position: absolute; left: 8px; right: 8px; bottom: 2px; height: 3px;
-    background: #232a3d; border-radius: 2px; overflow: hidden;
+    display: flex; gap: 1px;
   }
-  .rest > i { display: block; height: 100%; background: #4f9d5d; }
-  .rest.full > i { background: var(--danger); }
+  .rest > i { flex: 1; background: #232a3d; border-radius: 1px; overflow: hidden; display: block; }
+  .rest > i > b { display: block; height: 100%; background: #4f9d5d; }
+  .rest.full > i > b { background: var(--danger); }
 
   td.unavailable {
     text-align: center; color: #7fbf8f; background: #16301f;
@@ -272,12 +283,14 @@ const TASK_CATALOGUE = [
   // --- Daily, per character
   // `rest` marks content that banks rest bonus when skipped. gain is added per
   // missed day, spend is consumed by a clear, cap is the ceiling.
+  // Rest banks 20 a day to a ceiling of 100 — five boxes' worth — and a clear
+  // spends one box.
   { name: "Chaos Dungeon", icon: "chaos-dungeon.webp", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999,
-    rest: { gain: 10, spend: 20, cap: 100 } },
+    rest: { gain: 20, spend: 20, cap: 100 } },
   { name: "Guardian", icon: "guardian.png", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999,
-    rest: { gain: 10, spend: 20, cap: 100 } },
+    rest: { gain: 20, spend: 20, cap: 100 } },
   { name: "Una's Task", icon: "daily.webp", freq: "daily", scope: "character", reps: 3, min: 302, max: 9999,
-    rest: { gain: 10, spend: 20, cap: 100 } },
+    rest: { gain: 20, spend: 20, cap: 100 } },
   { name: "Kalthertz Slaves", icon: "pirate_coin.png", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999 },
   { name: "Guild Support", icon: "sylmael.png", freq: "daily", scope: "character", reps: 1, min: 0, max: 9999 },
 
@@ -336,14 +349,16 @@ const TASK_CATALOGUE = [
     modes: [{ name: "Solo", gold: 17000 }, { name: "Normal", gold: 17000 }, { name: "Hard", gold: 23000 }] },
   { name: "Mordum", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 3, min: 1700, max: 9999,
     modes: [{ name: "Solo", gold: 21000 }, { name: "Normal", gold: 21000 }, { name: "Hard", gold: 27000 }] },
+  // `box` is the cost of buying that difficulty's gate chests, deducted from
+  // gold when the character is set to buy them.
   { name: "Armoche", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1720, max: 9999,
-    modes: [{ name: "Solo", gold: 33000 }, { name: "Normal", gold: 33000 }, { name: "Hard", gold: 42000 }] },
+    modes: [{ name: "Solo", gold: 33000, box: 10000 }, { name: "Normal", gold: 33000, box: 10000 }, { name: "Hard", gold: 42000, box: 13000 }] },
   { name: "Kazeros", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1730, max: 9999,
-    modes: [{ name: "Solo", gold: 27000 }, { name: "Normal", gold: 27000 }, { name: "Hard", gold: 35000 }] },
+    modes: [{ name: "Solo", gold: 27000, box: 13000 }, { name: "Normal", gold: 27000, box: 13000 }, { name: "Hard", gold: 35000, box: 17000 }] },
   { name: "Serca", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1740, max: 9999,
-    modes: [{ name: "Matching", gold: 24000 }, { name: "Normal", gold: 24000 }, { name: "Hard", gold: 30000 }, { name: "Nightmare", gold: 37000 }] },
+    modes: [{ name: "Matching", gold: 24000, box: 11000 }, { name: "Normal", gold: 24000, box: 11000 }, { name: "Hard", gold: 30000, box: 14000 }, { name: "Nightmare", gold: 37000, box: 17000 }] },
   { name: "Horizon Cathedral", icon: "abyssal-dungeon.webp", freq: "weekly", scope: "character", reps: 2, min: 1750, max: 9999,
-    modes: [{ name: "Level 1", gold: 20000 }, { name: "Level 2", gold: 27000 }, { name: "Level 3", gold: 34000 }] },
+    modes: [{ name: "Level 1", gold: 20000, box: 10000 }, { name: "Level 2", gold: 27000, box: 13000 }, { name: "Level 3", gold: 34000, box: 16000 }] },
 
   // --- Weekly, whole roster
   { name: "South Vern Chaos Line Dungeon", icon: "dungeon.webp", freq: "weekly", scope: "roster", reps: 2, min: 1340, max: 9999 },
@@ -510,6 +525,8 @@ function defaultState() {
     charMode: {},
     // Banked rest bonus, keyed "taskId:characterId".
     rest: {},
+    // Gate chests bought, keyed "taskId:characterId".
+    boxes: {},
     // When the roster was last pulled from lostark.bible (epoch seconds).
     lastImport: 0,
     resetHour: 6,
@@ -570,8 +587,10 @@ function applyResets() {
     changed = true;
   }
   if (state.lastWeekly < weekly) {
-    const earned = goldTotals().earned;
-    if (earned > 0 || state.history.length) {
+    // Bank net gold, so history reflects what the week actually left you with
+    // after buying chests.
+    const earned = goldTotals().net;
+    if (earned !== 0 || state.history.length) {
       state.history.push({ end: Math.floor(weekly / 1000), gold: earned });
       if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
     }
@@ -622,9 +641,13 @@ function setCharTask(charId, taskId, on) {
   }
 }
 
+// Whether this character buys gate chests for this raid.
+const buysBoxes = (taskId, charId) => !!(state.boxes && state.boxes[taskId + ":" + charId]);
+
 function goldTotals() {
   let earned = 0;
   let potential = 0;
+  let boxCost = 0;
   // Only weekly raids pay gold, and the rate is whatever difficulty that
   // character runs.
   for (const t of state.tasks) {
@@ -633,13 +656,18 @@ function goldTotals() {
       if (!enabledFor(t, ch)) continue;
       // Mode gold is the whole raid's payout, so partial clears earn it pro
       // rata across the gates rather than per-gate.
-      const gold = Number(modeFor(t, ch.id).gold) || 0;
+      const mode = modeFor(t, ch.id);
+      const gold = Number(mode.gold) || 0;
       if (!gold) continue;
-      earned += Math.round(gold * (Math.min(progressOf(t.id, ch.id), t.reps) / t.reps));
+      const share = Math.min(progressOf(t.id, ch.id), t.reps) / t.reps;
+      earned += Math.round(gold * share);
       potential += gold;
+      // Chests are bought for the whole raid, so the cost lands once the raid
+      // is under way rather than scaling with gates.
+      if (buysBoxes(t.id, ch.id) && share > 0) boxCost += Number(mode.box) || 0;
     }
   }
-  return { earned, potential };
+  return { earned, potential, boxCost, net: earned - boxCost };
 }
 
 function completion() {
@@ -718,6 +746,7 @@ function normaliseScopes(s) {
       // still has blank, without overwriting anything typed in by hand.
       t.modes.forEach((m, i) => {
         if (!Number(m.gold) && Number(wanted[i].gold)) m.gold = wanted[i].gold;
+        if (!Number(m.box) && Number(wanted[i].box)) m.box = wanted[i].box;
       });
     }
 
@@ -768,12 +797,45 @@ function save() {
 
 /* ---------- roster import ---------- */
 
-// Rendered through an <img> data URI: the markup comes from lostark.bible, and
-// this way it cannot execute anything even though the Worker already stripped it.
+// Class icons are keyed off the class name rather than scraped from
+// lostark.bible: its roster page draws them as inline SVG and omits characters
+// hidden from the public listing, so half a roster would have no icon.
+const CLASS_ICON = (cls) =>
+  "https://lostarkcodex.com/icons/class_" + String(cls).toLowerCase().replace(/[^a-z]/g, "") + ".png";
+
 function classIconImg(ch, size) {
-  if (!ch.classIcon) return "";
-  return '<img class="class-icon" style="width:' + size + "px;height:" + size + 'px" alt="" ' +
-    'src="data:image/svg+xml;utf8,' + encodeURIComponent(ch.classIcon) + '">';
+  // Fall back to an icon scraped earlier, so anything already imported keeps its own.
+  if (ch.cls) {
+    return '<img class="class-icon" style="width:' + size + "px;height:" + size + 'px" alt="" ' +
+      'loading="lazy" src="' + CLASS_ICON(ch.cls) + '">';
+  }
+  if (ch.classIcon) {
+    return '<img class="class-icon" style="width:' + size + "px;height:" + size + 'px" alt="" ' +
+      'src="data:image/svg+xml;utf8,' + encodeURIComponent(ch.classIcon) + '">';
+  }
+  return "";
+}
+
+// Looks up the class for characters the roster listing did not cover.
+async function fillMissingClasses(quiet) {
+  if (!configured()) return;
+  const missing = state.characters.filter((c) => !c.cls && c.name);
+  if (!missing.length) return;
+
+  let found = 0;
+  for (const ch of missing) {
+    try {
+      const res = await api("/api/character?name=" + encodeURIComponent(ch.name) +
+        "&region=" + encodeURIComponent(state.bibleRegion));
+      if (!res.ok) continue;
+      const body = await res.json();
+      if (body.class) { ch.cls = body.class; found++; }
+    } catch (err) {
+      break; // network is down; stop rather than hammering
+    }
+  }
+  if (found) { save(); render(); toast(found + " class" + (found > 1 ? "es" : "") + " identified"); }
+  else if (!quiet) toast("No classes found");
 }
 
 async function importRoster(quiet) {
@@ -858,6 +920,7 @@ function render() {
     '<div class="panel" style="border-color:var(--gold)"><h2>Not connected</h2>' +
     '<p class="hint" style="margin:0">Tracker data lives in the Worker\'s database. ' +
     "Add the API URL and key on the Setup tab to load it.</p></div>";
+  document.body.classList.toggle("checklist", activeTab === "checklist");
   document.getElementById("view").innerHTML = banner + ({
     checklist: renderChecklist, dashboard: renderDashboard, history: renderHistory,
     roster: renderRoster, setup: renderSetup,
@@ -901,18 +964,32 @@ function cellFor(t, ch) {
     const m = modeFor(t, ch.id);
     badge = '<button class="mode" data-mode-task="' + t.id + '" data-mode-char="' + ch.id +
       '" title="' + esc(m.name) + " — " + (Number(m.gold) || 0).toLocaleString() +
-      ' gold each. Click to change difficulty.">' + esc(modeCode(m.name)) + "</button>";
+      ' gold. Click to change difficulty.">' + esc(modeCode(m.name)) + "</button>";
+    if (Number(m.box)) {
+      const on = buysBoxes(t.id, ch.id);
+      badge += '<button class="box' + (on ? " on" : "") + '" data-box-task="' + t.id +
+        '" data-box-char="' + ch.id + '" title="' +
+        (on ? "Buying chests: −" + Number(m.box).toLocaleString() + " gold" : "Not buying chests") +
+        '. Click to toggle.">▣</button>';
+    }
   }
   // Rest bar: fills as bonus banks up, turns red at the cap where further
   // skipped days are wasted.
+  // Rest shows as discrete boxes rather than a continuous bar, because that is
+  // how it is earned and spent: 20 points a box, five boxes to a full 100.
   let rest = "";
   const cfg = restCfg(t);
   if (cfg) {
     const pts = restOf(t.id, ch.id);
-    const pct = Math.round((pts / cfg.cap) * 100);
+    const boxes = Math.max(1, Math.round(cfg.cap / cfg.spend));
     const full = pts >= cfg.cap;
+    let cells = "";
+    for (let b = 0; b < boxes; b++) {
+      const fillPct = Math.max(0, Math.min(1, (pts - b * cfg.spend) / cfg.spend)) * 100;
+      cells += '<i><b style="width:' + fillPct + '%"></b></i>';
+    }
     rest = '<span class="rest' + (full ? " full" : "") + '" title="' + pts + " / " + cfg.cap +
-      ' rest bonus"><i style="width:' + pct + '%"></i></span>';
+      " rest bonus (" + Math.floor(pts / cfg.spend) + " of " + boxes + ' boxes)">' + cells + "</span>";
   }
   return '<td class="cell-td' + (done ? " done" : "") + '">' + badge +
     '<button class="cell' + (done ? " complete" : "") + '" data-task="' + t.id +
@@ -930,7 +1007,8 @@ function renderChecklist() {
   }
 
   const chars = state.characters;
-  let html = '<div class="panel"><div class="grid-wrap"><table class="grid"><thead><tr>' +
+  // No panel chrome here: the grid is the page on this tab, so it gets the width.
+  let html = '<div class="grid-wrap bare"><table class="grid"><thead><tr>' +
     '<th class="task-col">Task</th>';
   for (const c of chars) {
     html += '<th class="char-col">' + classIconImg(c, 20) + esc(c.name) +
@@ -980,12 +1058,12 @@ function renderChecklist() {
       html += "</tr>";
     }
   }
-  html += "</tbody></table></div></div>";
+  html += "</tbody></table></div>";
   return html;
 }
 
 function renderDashboard() {
-  const { earned, potential } = goldTotals();
+  const { earned, potential, boxCost, net } = goldTotals();
   const { done, total, pct } = completion();
   const goldPct = potential ? Math.round((earned / potential) * 100) : 0;
 
@@ -993,6 +1071,9 @@ function renderDashboard() {
     '<div class="card"><div class="label">Weekly gold</div><div class="value gold">' +
       earned.toLocaleString() + '</div><div class="sub">of ' + potential.toLocaleString() +
       " potential · " + goldPct + '%</div><div class="bar gold"><i style="width:' + goldPct + '%"></i></div></div>' +
+    '<div class="card"><div class="label">Net gold</div><div class="value' + (net < 0 ? "" : " gold") + '">' +
+      net.toLocaleString() + '</div><div class="sub">' +
+      (boxCost ? "after −" + boxCost.toLocaleString() + " on chests" : "no chests bought") + "</div></div>" +
     '<div class="card"><div class="label">Completion</div><div class="value teal">' + pct +
       '%</div><div class="sub">' + done + " of " + total + ' done</div>' +
       '<div class="bar"><i style="width:' + pct + '%"></i></div></div>' +
@@ -1103,7 +1184,13 @@ function renderRoster() {
     '<select id="bible-region"><option value="CE"' + (state.bibleRegion === "CE" ? " selected" : "") +
       ">Central Europe</option><option value=\"NA\"" + (state.bibleRegion === "NA" ? " selected" : "") +
       ">North America</option></select>" +
-    '<button class="btn primary" id="import-roster">Refresh roster</button></div></div>';
+    '<button class="btn primary" id="import-roster">Refresh roster</button>' +
+    '<button class="btn" id="fill-classes" title="Looks up each character\'s class on its own ' +
+    'lostark.bible page, which works even for characters hidden from your public roster listing">' +
+    "Fetch missing classes</button></div>" +
+    '<p class="hint" style="margin:8px 0 0">Only characters set to "Show in Roster Listing" on ' +
+    "lostark.bible come through the roster import — the rest can be added by name here and " +
+    "filled in with the button above.</p></div>";
 
   html += '<div class="panel"><h2>Characters</h2>' +
     '<p class="hint">"Counts gold" marks the characters whose rewards feed the gold totals. ' +
@@ -1287,6 +1374,14 @@ view.addEventListener("click", (e) => {
   const cell = t.closest("button.cell");
   if (cell) { bumpCell(cell, 1); return; }
 
+  const boxBtn = t.closest("button.box");
+  if (boxBtn) {
+    const key = boxBtn.dataset.boxTask + ":" + boxBtn.dataset.boxChar;
+    if (state.boxes[key]) delete state.boxes[key];
+    else state.boxes[key] = true;
+    save(); render(); return;
+  }
+
   const modeBtn = t.closest("button.mode");
   if (modeBtn) {
     const task = state.tasks.find((x) => x.id === modeBtn.dataset.modeTask);
@@ -1355,6 +1450,7 @@ view.addEventListener("click", (e) => {
   }
 
   if (t.id === "import-roster") { importRoster(); return; }
+  if (t.id === "fill-classes") { toast("Looking up classes…"); fillMissingClasses(); return; }
 
   if (t.dataset.charAll || t.dataset.charNone) {
     const charId = t.dataset.charAll || t.dataset.charNone;
