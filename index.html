@@ -951,13 +951,35 @@ function renderRoster() {
 }
 
 function renderSetup() {
+  const icons = [...new Set(TASK_CATALOGUE.map((c) => c.icon))].sort();
+
   let html = '<div class="panel"><h2>Add tasks</h2>' +
     '<p class="hint">Names, icons, repetition counts and item-level ranges come from ' +
     "lostark-helper's task manager. Gold is 0 on everything — set it per task below, since gold " +
     "rewards change with patches.</p><div class=\"add-row\">" +
     '<button class="btn primary" id="add-endgame">Add endgame raids (ilvl 1680+)</button>' +
-    '<button class="btn" id="add-dailies">Add dailies &amp; weeklies</button>' +
     '<button class="btn" id="add-all">Add everything</button></div></div>';
+
+  html += '<div class="panel"><h2>Custom task</h2>' +
+    '<p class="hint">For anything the catalogue doesn\'t cover — an event, a personal goal, ' +
+    "a shop you want to remember. Roster scope gives one counter for the whole account; " +
+    "character scope gives one per character, subject to the item-level range.</p>" +
+    '<div class="add-row">' +
+      '<input type="text" id="ct-name" class="grow" placeholder="Task name" style="min-width:200px">' +
+      '<select id="ct-icon" title="Icon">' +
+        icons.map((i) => '<option value="' + esc(i) + '">' + esc(i.replace(/\.(webp|png)$/, "")) + "</option>").join("") +
+      "</select>" +
+      '<select id="ct-freq" title="Frequency"><option value="daily">Daily</option>' +
+        '<option value="weekly" selected>Weekly</option><option value="biweekly">Biweekly</option></select>' +
+      '<select id="ct-scope" title="Scope"><option value="character">Character</option>' +
+        '<option value="roster" selected>Roster</option></select>' +
+    "</div><div class=\"add-row\">" +
+      '<label class="muted">Repetitions <input type="number" id="ct-reps" min="1" max="99" value="1" style="width:70px"></label>' +
+      '<label class="muted">Min ilvl <input type="number" id="ct-min" min="0" value="0" style="width:90px"></label>' +
+      '<label class="muted">Max ilvl <input type="number" id="ct-max" min="0" value="9999" style="width:90px"></label>' +
+      '<label class="muted">Gold each <input type="number" id="ct-gold" min="0" value="0" style="width:90px"></label>' +
+      '<button class="btn primary" id="add-custom">Add task</button>' +
+    "</div></div>";
 
   html += '<div class="panel"><h2>Tasks</h2>';
   if (!state.tasks.length) html += '<p class="empty">No tasks yet.</p>';
@@ -1063,8 +1085,38 @@ view.addEventListener("click", (e) => {
   }
 
   if (t.id === "add-endgame") { addTasks((c) => c.min >= 1680, "endgame raids"); return; }
-  if (t.id === "add-dailies") { addTasks((c) => c.min < 1680 && c.max === 9999, "tasks"); return; }
   if (t.id === "add-all") { addTasks(() => true, "tasks"); return; }
+
+  if (t.id === "add-custom") {
+    const name = document.getElementById("ct-name").value.trim();
+    if (!name) { toast("Give the task a name"); return; }
+    if (state.tasks.some((x) => x.name.toLowerCase() === name.toLowerCase())) {
+      toast("A task with that name already exists");
+      return;
+    }
+    const num = (id, fallback) => {
+      const v = parseInt(document.getElementById(id).value, 10);
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const min = Math.max(0, num("ct-min", 0));
+    const max = Math.max(min, num("ct-max", 9999));
+    state.tasks.push({
+      id: uid(),
+      name,
+      icon: document.getElementById("ct-icon").value,
+      freq: document.getElementById("ct-freq").value,
+      scope: document.getElementById("ct-scope").value,
+      reps: Math.min(99, Math.max(1, num("ct-reps", 1))),
+      min, max,
+      gold: Math.max(0, num("ct-gold", 0)),
+      tracked: true,
+      custom: true,
+    });
+    save();
+    render();
+    toast('Added "' + name + '"');
+    return;
+  }
 
   if (t.dataset.removeTask) {
     const id = t.dataset.removeTask;
