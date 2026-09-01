@@ -134,6 +134,28 @@
   .carry { position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
            color: #6d768f; font-size: 11px; font-weight: 600; pointer-events: none; }
 
+  /* Difficulty badge, left of the counter — click cycles through the modes. */
+  .mode {
+    position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+    border: 1px solid #46507a; background: #1d2340;
+    color: var(--gold); border-radius: 3px; font: 600 10px/1 inherit;
+    padding: 3px 4px; cursor: pointer; min-width: 22px;
+  }
+  .mode:hover { border-color: var(--gold); }
+
+  /* Rest bonus bar, hugging the bottom edge of the cell. */
+  .rest {
+    position: absolute; left: 8px; right: 8px; bottom: 2px; height: 3px;
+    background: #232a3d; border-radius: 2px; overflow: hidden;
+  }
+  .rest > i { display: block; height: 100%; background: #4f9d5d; }
+  .rest.full > i { background: var(--danger); }
+
+  td.unavailable {
+    text-align: center; color: #7fbf8f; background: #16301f;
+    font-size: 12px; padding: 7px 4px;
+  }
+
   /* A finished cell is shaded rather than coloured-in, so the blue pills read
      as "still to do" at a glance across a wide roster. */
   tr:not(.tint-weekly) td.cell-td.done { background: #172b1d; }
@@ -200,6 +222,9 @@
   }
   label.task-pick img { width: 16px; height: 16px; }
 
+  td.modes { display: flex; gap: 8px; flex-wrap: wrap; }
+  label.mode-edit { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+
   .toast {
     position: fixed; bottom: 16px; right: 16px; background: var(--panel-2);
     border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px;
@@ -244,17 +269,25 @@ const ICON_BASE = "https://lostark-helper.com/assets/icons/";
 
 const TASK_CATALOGUE = [
   // --- Daily, per character
-  { name: "Chaos Dungeon", icon: "chaos-dungeon.webp", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999 },
-  { name: "Guardian", icon: "guardian.png", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999 },
-  { name: "Una's Task", icon: "daily.webp", freq: "daily", scope: "character", reps: 3, min: 302, max: 9999 },
+  // `rest` marks content that banks rest bonus when skipped. gain is added per
+  // missed day, spend is consumed by a clear, cap is the ceiling.
+  { name: "Chaos Dungeon", icon: "chaos-dungeon.webp", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999,
+    rest: { gain: 10, spend: 20, cap: 100 } },
+  { name: "Guardian", icon: "guardian.png", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999,
+    rest: { gain: 10, spend: 20, cap: 100 } },
+  { name: "Una's Task", icon: "daily.webp", freq: "daily", scope: "character", reps: 3, min: 302, max: 9999,
+    rest: { gain: 10, spend: 20, cap: 100 } },
   { name: "Kalthertz Slaves", icon: "pirate_coin.png", freq: "daily", scope: "character", reps: 1, min: 302, max: 9999 },
   { name: "Guild Support", icon: "sylmael.png", freq: "daily", scope: "character", reps: 1, min: 0, max: 9999 },
 
   // --- Daily, whole roster
-  { name: "Chaos Gate", icon: "chaos_gate.png", freq: "daily", scope: "roster", reps: 1, min: 302, max: 9999 },
+  // `days` restricts a task to certain weekdays (0 = Sunday), as lostark-helper does.
+  { name: "Chaos Gate", icon: "chaos_gate.png", freq: "daily", scope: "roster", reps: 1, min: 302, max: 9999,
+    days: [1, 4, 6, 0] },
   { name: "Anguished Island", icon: "anguished.png", freq: "daily", scope: "roster", reps: 1, min: 302, max: 9999 },
   { name: "Adventure Island", icon: "island.webp", freq: "daily", scope: "roster", reps: 1, min: 302, max: 9999 },
-  { name: "Procyon Boss", icon: "island.webp", freq: "daily", scope: "roster", reps: 1, min: 302, max: 9999 },
+  { name: "Procyon Boss", icon: "island.webp", freq: "daily", scope: "roster", reps: 1, min: 302, max: 9999,
+    days: [2, 5, 0] },
   { name: "Affinity Song", icon: "rapport.webp", freq: "daily", scope: "roster", reps: 6, min: 302, max: 9999 },
   { name: "Affinity Emote", icon: "rapport.webp", freq: "daily", scope: "roster", reps: 6, min: 302, max: 9999 },
 
@@ -302,7 +335,8 @@ const TASK_CATALOGUE = [
 
   // --- Weekly, whole roster
   { name: "South Vern Chaos Line Dungeon", icon: "dungeon.webp", freq: "weekly", scope: "roster", reps: 2, min: 1340, max: 9999 },
-  { name: "Primal Island Battle Royale", icon: "event_quest.webp", freq: "weekly", scope: "roster", reps: 9, min: 1490, max: 9999 },
+  { name: "Primal Island Battle Royale", icon: "event_quest.webp", freq: "weekly", scope: "roster", reps: 9, min: 1490, max: 9999,
+    days: [2, 4, 6] },
 ];
 
 /**
@@ -315,6 +349,75 @@ const RAID_ICONS = new Set([
   "abyssal-dungeon.webp", "abyssal-raid.webp", "legion_raid.png", "kazeros-raid.webp",
 ]);
 const isRaidTask = (t) => RAID_ICONS.has(t.icon);
+
+// Gold comes only from weekly raids, and the amount depends on the difficulty
+// cleared — so a raid carries a set of modes and each character picks one.
+// Amounts start at 0: they are patch-specific and differ per gate, and reading
+// them off Neria means clicking through its difficulty picker, which would
+// change your data there. Fill them in from Neria yourself.
+const isGoldTask = (t) => t.freq === "weekly" && isRaidTask(t);
+const DEFAULT_MODES = () => [
+  { name: "Normal", gold: 0 },
+  { name: "Hard", gold: 0 },
+  { name: "Nightmare", gold: 0 },
+];
+// Short codes for the grid, matching the shorthand Neria uses.
+const MODE_CODE = { Normal: "N", Hard: "H", Nightmare: "NM", Extreme: "X", Solo: "S" };
+const modeCode = (name) => MODE_CODE[name] || name.slice(0, 2).toUpperCase();
+
+const modesOf = (t) => (Array.isArray(t.modes) && t.modes.length ? t.modes : DEFAULT_MODES());
+
+/* ---------- availability by weekday ---------- */
+
+// The tracker "day" turns over at the reset hour, not midnight, so anything
+// before the reset still belongs to the previous day.
+function trackerToday() {
+  const d = new Date();
+  if (d.getHours() < (state ? state.resetHour : 6)) d.setDate(d.getDate() - 1);
+  return d.getDay();
+}
+
+const availableToday = (t) =>
+  !Array.isArray(t.days) || !t.days.length || t.days.includes(trackerToday());
+
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const daysLabel = (t) => (t.days || []).map((d) => DAY_SHORT[d]).join(", ");
+
+/* ---------- rest bonus ---------- */
+
+// Rest banks up on content you skip and is spent when you clear it. Only the
+// dailies that work this way in game carry a `rest` config.
+const restCfg = (t) => t.rest || null;
+const restKey = (taskId, charId) => taskId + ":" + charId;
+const restOf = (taskId, charId) => state.rest[restKey(taskId, charId)] || 0;
+
+function applyRestForDay() {
+  for (const t of state.tasks) {
+    const cfg = restCfg(t);
+    if (!cfg || !isTracked(t)) continue;
+    for (const ch of state.characters) {
+      if (!enabledFor(t, ch)) continue;
+      const key = restKey(t.id, ch.id);
+      const cleared = progressOf(t.id, ch.id) >= t.reps;
+      const current = state.rest[key] || 0;
+      // A clear spends rest; a skipped day banks it, up to the cap.
+      const next = cleared
+        ? Math.max(0, current - cfg.spend)
+        : Math.min(cfg.cap, current + cfg.gain);
+      if (next === 0) delete state.rest[key];
+      else state.rest[key] = next;
+    }
+  }
+}
+
+// Which mode a character runs a raid on. Defaults to the first mode.
+function modeIndexFor(task, charId) {
+  const perChar = state.charMode && state.charMode[charId];
+  const i = perChar ? perChar[task.id] : undefined;
+  const modes = modesOf(task);
+  return Number.isInteger(i) && i >= 0 && i < modes.length ? i : 0;
+}
+const modeFor = (task, charId) => modesOf(task)[modeIndexFor(task, charId)];
 </script>
 <script>
 "use strict";
@@ -388,6 +491,10 @@ function defaultState() {
     seeded: false,
     // Collapsed checklist sections, keyed "freq|scope".
     collapsed: {},
+    // Difficulty chosen per character per raid: { characterId: { taskId: index } }.
+    charMode: {},
+    // Banked rest bonus, keyed "taskId:characterId".
+    rest: {},
     resetHour: 6,
     resetDay: 3,          // Wednesday
     lastDaily: 0,
@@ -439,6 +546,8 @@ function applyResets() {
   const weekly = lastWeeklyBoundary(state.resetDay, state.resetHour);
 
   if (state.lastDaily < daily) {
+    // Rest is decided by what the day ended with, so bank it before wiping.
+    applyRestForDay();
     clearFreq("daily");
     state.lastDaily = daily;
     changed = true;
@@ -499,16 +608,14 @@ function setCharTask(charId, taskId, on) {
 function goldTotals() {
   let earned = 0;
   let potential = 0;
+  // Only weekly raids pay gold, and the rate is whatever difficulty that
+  // character runs.
   for (const t of state.tasks) {
-    const gold = Number(t.gold) || 0;
-    if (!gold || !isTracked(t)) continue;
-    if (t.scope === "roster") {
-      earned += gold * progressOf(t.id, ROSTER);
-      potential += gold * t.reps;
-      continue;
-    }
+    if (!isTracked(t) || !isGoldTask(t)) continue;
     for (const ch of goldChars()) {
       if (!enabledFor(t, ch)) continue;
+      const gold = Number(modeFor(t, ch.id).gold) || 0;
+      if (!gold) continue;
       earned += gold * progressOf(t.id, ch.id);
       potential += gold * t.reps;
     }
@@ -556,12 +663,20 @@ async function loadState() {
 
 // v1 kept separate dailyTasks/weeklyTasks/raids arrays and boolean progress.
 // Characters are worth carrying across; the rest is rebuilt from the catalogue.
-// Scope is derived from the catalogue rather than stored opinion, so a change
-// to the raid/non-raid rule reaches state that was saved under the old one.
+// Catalogue-derived facts are refreshed from the catalogue rather than trusted
+// from storage, so rule changes reach state saved under the old rules and new
+// fields backfill onto tasks seeded before they existed.
 function normaliseScopes(s) {
   for (const t of s.tasks || []) {
     const ref = TASK_CATALOGUE.find((c) => c.name === t.name);
     if (!ref) continue;
+
+    if (ref.days) t.days = ref.days; else delete t.days;
+    if (ref.rest) t.rest = ref.rest; else delete t.rest;
+    if (isGoldTask(t) && (!Array.isArray(t.modes) || !t.modes.length)) t.modes = DEFAULT_MODES();
+    if (!isGoldTask(t)) delete t.modes;
+    delete t.gold; // superseded by per-difficulty amounts
+
     if (t.scope !== ref.scope) {
       // Progress was keyed by the old scope, so drop this task's counters
       // rather than leave them stranded under keys nothing reads.
@@ -649,7 +764,8 @@ function addTasks(predicate, label) {
     if (state.tasks.some((t) => t.name === c.name)) continue;
     state.tasks.push({
       id: uid(), name: c.name, icon: c.icon, freq: c.freq, scope: c.scope,
-      reps: c.reps, min: c.min, max: c.max, gold: 0, tracked: true,
+      reps: c.reps, min: c.min, max: c.max, tracked: true,
+      days: c.days, rest: c.rest, modes: isGoldTask(c) ? DEFAULT_MODES() : undefined,
     });
     added++;
   }
@@ -721,12 +837,29 @@ function cellFor(t, ch) {
   if (!enabledFor(t, ch)) return '<td class="na"><span title="Not tracked for this character">·</span></td>';
   const n = progressOf(t.id, ch.id);
   const done = n >= t.reps;
-  const coin = Number(t.gold) > 0 ? '<span class="coin">🪙</span>' : "";
-  return '<td class="cell-td' + (done ? " done" : "") + '">' +
+  let badge = "";
+  if (isGoldTask(t)) {
+    const m = modeFor(t, ch.id);
+    badge = '<button class="mode" data-mode-task="' + t.id + '" data-mode-char="' + ch.id +
+      '" title="' + esc(m.name) + " — " + (Number(m.gold) || 0).toLocaleString() +
+      ' gold each. Click to change difficulty.">' + esc(modeCode(m.name)) + "</button>";
+  }
+  // Rest bar: fills as bonus banks up, turns red at the cap where further
+  // skipped days are wasted.
+  let rest = "";
+  const cfg = restCfg(t);
+  if (cfg) {
+    const pts = restOf(t.id, ch.id);
+    const pct = Math.round((pts / cfg.cap) * 100);
+    const full = pts >= cfg.cap;
+    rest = '<span class="rest' + (full ? " full" : "") + '" title="' + pts + " / " + cfg.cap +
+      ' rest bonus"><i style="width:' + pct + '%"></i></span>';
+  }
+  return '<td class="cell-td' + (done ? " done" : "") + '">' + badge +
     '<button class="cell' + (done ? " complete" : "") + '" data-task="' + t.id +
     '" data-char="' + ch.id + '" title="Click to advance, right-click to step back">' +
-    coin + n + " / " + t.reps + "</button>" +
-    (done ? '<span class="carry">C</span>' : "") + "</td>";
+    n + " / " + t.reps + "</button>" +
+    (done ? '<span class="carry">C</span>' : "") + rest + "</td>";
 }
 
 function renderChecklist() {
@@ -765,6 +898,15 @@ function renderChecklist() {
     const tint = sec.freq !== "daily" ? " tint-weekly" : "";
     for (const t of tasks) {
       html += '<tr class="' + tint.trim() + '">' + taskLabel(t);
+
+      // Day-restricted content is shown but not clickable off-schedule, so the
+      // row still says what it is rather than vanishing from the grid.
+      if (!availableToday(t)) {
+        html += '<td class="unavailable" colspan="' + chars.length + '" title="Available ' +
+          esc(daysLabel(t)) + '">Not available today</td></tr>';
+        continue;
+      }
+
       if (t.scope === "roster") {
         // One shared counter for the whole account, spanning every column.
         const n = progressOf(t.id, ROSTER);
@@ -827,8 +969,8 @@ function renderDashboard() {
     for (const ch of gc) {
       let sum = 0;
       for (const t of state.tasks) {
-        if (t.scope === "roster" || !applies(t, ch)) continue;
-        sum += (Number(t.gold) || 0) * progressOf(t.id, ch.id);
+        if (!isTracked(t) || !isGoldTask(t) || !enabledFor(t, ch)) continue;
+        sum += (Number(modeFor(t, ch.id).gold) || 0) * progressOf(t.id, ch.id);
       }
       html += "<tr><td>" + esc(ch.name) + '</td><td class="num" style="color:var(--gold)">' +
         sum.toLocaleString() + "</td></tr>";
@@ -977,16 +1119,26 @@ function renderSetup() {
       '<label class="muted">Repetitions <input type="number" id="ct-reps" min="1" max="99" value="1" style="width:70px"></label>' +
       '<label class="muted">Min ilvl <input type="number" id="ct-min" min="0" value="0" style="width:90px"></label>' +
       '<label class="muted">Max ilvl <input type="number" id="ct-max" min="0" value="9999" style="width:90px"></label>' +
-      '<label class="muted">Gold each <input type="number" id="ct-gold" min="0" value="0" style="width:90px"></label>' +
       '<button class="btn primary" id="add-custom">Add task</button>' +
+      '<span class="muted" style="font-size:12px">Gold is set per difficulty in the table above, ' +
+      "and only for weekly raids.</span>" +
     "</div></div>";
 
   html += '<div class="panel"><h2>Tasks</h2>';
   if (!state.tasks.length) html += '<p class="empty">No tasks yet.</p>';
   else {
     html += '<table class="plain"><tr><th>Tracked</th><th>Task</th><th>Frequency</th><th>Scope</th>' +
-      '<th class="num">Reps</th><th class="num">Min ilvl</th><th class="num">Gold each</th><th></th></tr>';
+      '<th class="num">Reps</th><th class="num">Min ilvl</th><th>Gold per clear</th><th></th></tr>';
     for (const t of state.tasks) {
+      // Gold is a per-difficulty figure and only weekly raids pay it, so the
+      // other rows get a dash rather than an input that would do nothing.
+      let goldCell = '<td class="muted">—</td>';
+      if (isGoldTask(t)) {
+        goldCell = '<td class="modes">' + modesOf(t).map((m, i) =>
+          '<label class="mode-edit"><span>' + esc(m.name) + "</span>" +
+          '<input type="number" min="0" value="' + (Number(m.gold) || 0) +
+          '" data-mode-gold="' + i + '" style="width:86px"></label>').join("") + "</td>";
+      }
       html += '<tr data-task-row="' + t.id + '">' +
         '<td><input type="checkbox" data-field="tracked"' + (isTracked(t) ? " checked" : "") +
         ' title="Untick to hide this task from the grid entirely"></td><td' +
@@ -994,8 +1146,7 @@ function renderSetup() {
         (t.icon ? '<img src="' + ICON_BASE + esc(t.icon) + '" alt="" style="width:16px;height:16px;vertical-align:-3px;margin-right:6px">' : "") +
         esc(t.name) + '</td><td class="muted">' + esc(t.freq) + '</td><td class="muted">' + esc(t.scope) +
         '</td><td class="num muted">' + t.reps + '</td><td class="num muted">' + t.min + "</td>" +
-        '<td class="num"><input type="number" min="0" value="' + (t.gold || 0) +
-          '" data-field="gold" style="width:90px"></td>' +
+        goldCell +
         '<td class="num"><button class="btn danger" data-remove-task="' + t.id + '">Remove</button></td></tr>';
     }
     html += "</table>";
@@ -1051,8 +1202,7 @@ function bumpCell(btn, delta) {
 
   const isRoster = btn.dataset.char === ROSTER;
   const done = next >= t.reps;
-  const coin = Number(t.gold) > 0 && !isRoster ? '<span class="coin">🪙</span>' : "";
-  btn.innerHTML = coin + next + " / " + t.reps;
+  btn.textContent = next + " / " + t.reps;
   btn.className = "cell" + (isRoster ? " roster" : "") + (done ? " complete" : "");
 
   // Keep the carry marker in step without re-rendering the whole grid, which
@@ -1075,6 +1225,20 @@ view.addEventListener("click", (e) => {
   const t = e.target;
   const cell = t.closest("button.cell");
   if (cell) { bumpCell(cell, 1); return; }
+
+  const modeBtn = t.closest("button.mode");
+  if (modeBtn) {
+    const task = state.tasks.find((x) => x.id === modeBtn.dataset.modeTask);
+    const charId = modeBtn.dataset.modeChar;
+    if (task) {
+      const next = (modeIndexFor(task, charId) + 1) % modesOf(task).length;
+      if (!state.charMode[charId]) state.charMode[charId] = {};
+      state.charMode[charId][task.id] = next;
+      save();
+      render();
+    }
+    return;
+  }
 
   const band = t.closest("tr.section th[data-section]");
   if (band) {
@@ -1100,7 +1264,7 @@ view.addEventListener("click", (e) => {
     };
     const min = Math.max(0, num("ct-min", 0));
     const max = Math.max(min, num("ct-max", 9999));
-    state.tasks.push({
+    const task = {
       id: uid(),
       name,
       icon: document.getElementById("ct-icon").value,
@@ -1108,10 +1272,12 @@ view.addEventListener("click", (e) => {
       scope: document.getElementById("ct-scope").value,
       reps: Math.min(99, Math.max(1, num("ct-reps", 1))),
       min, max,
-      gold: Math.max(0, num("ct-gold", 0)),
       tracked: true,
       custom: true,
-    });
+    };
+    // Only weekly raids carry gold, and it is set per difficulty afterwards.
+    if (isGoldTask(task)) task.modes = DEFAULT_MODES();
+    state.tasks.push(task);
     save();
     render();
     toast('Added "' + name + '"');
@@ -1309,9 +1475,12 @@ view.addEventListener("change", (e) => {
   }
 
   const taskRow = t.closest("[data-task-row]");
-  if (taskRow && t.dataset.field === "gold") {
+  if (taskRow && t.dataset.modeGold !== undefined) {
     const task = state.tasks.find((x) => x.id === taskRow.dataset.taskRow);
-    if (task) task.gold = Math.max(0, parseInt(t.value, 10) || 0);
+    if (task) {
+      if (!Array.isArray(task.modes) || !task.modes.length) task.modes = DEFAULT_MODES();
+      task.modes[Number(t.dataset.modeGold)].gold = Math.max(0, parseInt(t.value, 10) || 0);
+    }
     save(); return;
   }
   if (taskRow && t.dataset.field === "tracked") {
@@ -1341,7 +1510,8 @@ view.addEventListener("change", (e) => {
     for (const c of TASK_CATALOGUE) {
       state.tasks.push({
         id: uid(), name: c.name, icon: c.icon, freq: c.freq, scope: c.scope,
-        reps: c.reps, min: c.min, max: c.max, gold: 0, tracked: true,
+        reps: c.reps, min: c.min, max: c.max, tracked: true,
+      days: c.days, rest: c.rest, modes: isGoldTask(c) ? DEFAULT_MODES() : undefined,
       });
     }
     orderTasks();
