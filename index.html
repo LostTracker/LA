@@ -259,6 +259,20 @@ const TASK_CATALOGUE = [
   { name: "South Vern Chaos Line Dungeon", icon: "dungeon.webp", freq: "weekly", scope: "roster", reps: 2, min: 1340, max: 9999 },
   { name: "Primal Island Battle Royale", icon: "event_quest.webp", freq: "weekly", scope: "roster", reps: 9, min: 1490, max: 9999 },
 ];
+
+/**
+ * Scope rule: raids are tracked per character and are individually selectable;
+ * everything else is a single counter for the whole roster.
+ *
+ * Raids are identified by the icon lostark-helper gives them — abyssal
+ * dungeons, abyssal raids, legion raids and Kazeros-era raids. That keeps the
+ * classification tied to their data rather than to a hand-maintained name list.
+ */
+const RAID_ICONS = new Set([
+  "abyssal-dungeon.webp", "abyssal-raid.webp", "legion_raid.png", "kazeros-raid.webp",
+]);
+const isRaidTask = (t) => RAID_ICONS.has(t.icon);
+for (const t of TASK_CATALOGUE) t.scope = isRaidTask(t) ? "character" : "roster";
 </script>
 <script>
 "use strict";
@@ -498,8 +512,26 @@ async function loadState() {
 
 // v1 kept separate dailyTasks/weeklyTasks/raids arrays and boolean progress.
 // Characters are worth carrying across; the rest is rebuilt from the catalogue.
+// Scope is derived from the catalogue rather than stored opinion, so a change
+// to the raid/non-raid rule reaches state that was saved under the old one.
+function normaliseScopes(s) {
+  for (const t of s.tasks || []) {
+    const ref = TASK_CATALOGUE.find((c) => c.name === t.name);
+    if (!ref) continue;
+    if (t.scope !== ref.scope) {
+      // Progress was keyed by the old scope, so drop this task's counters
+      // rather than leave them stranded under keys nothing reads.
+      for (const key of Object.keys(s.progress || {})) {
+        if (key.startsWith(t.id + ":")) delete s.progress[key];
+      }
+      t.scope = ref.scope;
+    }
+  }
+  return s;
+}
+
 function migrate(s) {
-  if (s.version === 2) return s;
+  if (s.version === 2) return normaliseScopes(s);
   const fresh = defaultState();
   fresh.characters = Array.isArray(s.characters) ? s.characters : [];
   fresh.resetHour = s.resetHour ?? fresh.resetHour;
@@ -621,11 +653,12 @@ function renderAccount() {
 }
 
 const SECTIONS = [
-  { freq: "daily", scope: "character", label: "Daily · Character" },
-  { freq: "daily", scope: "roster", label: "Daily · Roster" },
-  { freq: "weekly", scope: "character", label: "Weekly · Character" },
-  { freq: "biweekly", scope: "character", label: "Biweekly · Character" },
-  { freq: "weekly", scope: "roster", label: "Weekly · Roster" },
+  { freq: "daily", scope: "roster", label: "Daily" },
+  { freq: "weekly", scope: "roster", label: "Weekly" },
+  { freq: "weekly", scope: "character", label: "Weekly raids" },
+  { freq: "biweekly", scope: "character", label: "Biweekly raids" },
+  // Kept so nothing disappears if a task is ever classified this way.
+  { freq: "daily", scope: "character", label: "Daily raids" },
 ];
 
 function taskLabel(t) {
@@ -816,7 +849,8 @@ function renderRoster() {
     '<button class="btn primary" id="import-roster">Refresh roster</button></div></div>';
 
   html += '<div class="panel"><h2>Characters</h2>' +
-    '<p class="hint">"Counts gold" marks the characters whose rewards feed the gold totals.</p>';
+    '<p class="hint">"Counts gold" marks the characters whose rewards feed the gold totals. ' +
+    "Raids are picked per character below; dailies and weeklies are tracked once for the whole roster.</p>";
   if (!state.characters.length) html += '<p class="empty">No characters yet.</p>';
   else {
     for (const c of state.characters) {
@@ -833,10 +867,10 @@ function renderRoster() {
 
       html += '<details class="char-tasks" data-char-tasks="' + c.id + '"' +
         (openCharPanels.has(c.id) ? " open" : "") + "><summary>" +
-        on + " of " + eligible.length + " tasks tracked for " + esc(c.name) + "</summary>";
+        on + " of " + eligible.length + " raids tracked for " + esc(c.name) + "</summary>";
 
       if (!eligible.length) {
-        html += '<p class="empty">No tasks match this character\'s item level yet.</p>';
+        html += '<p class="empty">No raids match this character\'s item level yet.</p>';
       } else {
         html += '<div class="add-row" style="margin:0 0 8px">' +
           '<button class="btn" data-char-all="' + c.id + '">Select all</button>' +
