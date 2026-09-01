@@ -797,23 +797,20 @@ function save() {
 
 /* ---------- roster import ---------- */
 
-// Class icons are keyed off the class name rather than scraped from
-// lostark.bible: its roster page draws them as inline SVG and omits characters
-// hidden from the public listing, so half a roster would have no icon.
-const CLASS_ICON = (cls) =>
-  "https://lostarkcodex.com/icons/class_" + String(cls).toLowerCase().replace(/[^a-z]/g, "") + ".png";
-
+/**
+ * Class icons come from lostark.bible's roster listing, as inline SVG rendered
+ * through an img data URI.
+ *
+ * Other sources were tried and rejected: lostarkcodex serves an identical
+ * placeholder to anything that is not a browser, and the Lost Ark wiki has no
+ * icon for several current classes. A character's own bible page carries no
+ * class glyph either — only the roster listing does. So a character shows an
+ * icon exactly when it is set to "Show in Roster Listing" on lostark.bible.
+ */
 function classIconImg(ch, size) {
-  // Fall back to an icon scraped earlier, so anything already imported keeps its own.
-  if (ch.cls) {
-    return '<img class="class-icon" style="width:' + size + "px;height:" + size + 'px" alt="" ' +
-      'loading="lazy" src="' + CLASS_ICON(ch.cls) + '">';
-  }
-  if (ch.classIcon) {
-    return '<img class="class-icon" style="width:' + size + "px;height:" + size + 'px" alt="" ' +
-      'src="data:image/svg+xml;utf8,' + encodeURIComponent(ch.classIcon) + '">';
-  }
-  return "";
+  if (!ch.classIcon) return "";
+  return '<img class="class-icon" style="width:' + size + "px;height:" + size + 'px" alt="" ' +
+    'src="data:image/svg+xml;utf8,' + encodeURIComponent(ch.classIcon) + '">';
 }
 
 // Looks up the class for characters the roster listing did not cover.
