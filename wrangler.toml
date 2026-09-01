@@ -7,6 +7,12 @@ binding = "DB"
 database_name = "losttracker-db"
 database_id = "55ddd07a-8180-42f2-ae61-b39c0e4096be"
 
-# Secrets (set via `wrangler secret put`, or the Cloudflare dashboard):
-#   DISCORD_CLIENT_ID
-#   DISCORD_CLIENT_SECRET
+[vars]
+# Origin the frontend is served from. Must match exactly (scheme + host, no
+# trailing slash) or the browser will reject the credentialed CORS response.
+APP_ORIGIN = "https://losttracker.github.io"
+# Not a secret; safe to commit. Fill in from the Discord Developer Portal.
+DISCORD_CLIENT_ID = ""
+
+# Secret, set out of band and never committed:
+#   npx wrangler secret put DISCORD_CLIENT_SECRET
