@@ -19,7 +19,7 @@ schedule, plus a gold-tracking dashboard.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/auth/login` | Redirect to Discord's consent screen |
+| GET | `/auth/discord` | Redirect to Discord's consent screen (alias: `/auth/login`) |
 | GET | `/auth/callback` | Exchange the code, open a session, bounce back to the app |
 | POST | `/auth/logout` | Drop the session |
 | GET | `/api/me` | The signed-in user, or 401 |

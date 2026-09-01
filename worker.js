@@ -4,7 +4,7 @@
  * Discord OAuth + per-user state persistence, backed by D1 (losttracker-db).
  *
  * Routes:
- *   GET    /auth/login     redirect to Discord's consent screen
+ *   GET    /auth/discord   redirect to Discord's consent screen (alias: /auth/login)
  *   GET    /auth/callback  exchange the code, open a session, bounce to the app
  *   POST   /auth/logout    drop the session
  *   GET    /api/me         the signed-in user, or 401
@@ -268,7 +268,10 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders(env, request) });
     }
 
-    if (path === '/auth/login' && request.method === 'GET') return handleLogin(request, env);
+    // /auth/discord mirrors lostark.bible's route; /auth/login is kept as an alias.
+    if ((path === '/auth/discord' || path === '/auth/login') && request.method === 'GET') {
+      return handleLogin(request, env);
+    }
     if (path === '/auth/callback' && request.method === 'GET') return handleCallback(request, env);
     if (path === '/auth/logout' && request.method === 'POST') return handleLogout(request, env);
 
