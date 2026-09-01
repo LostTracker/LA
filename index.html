@@ -80,6 +80,14 @@
     min-width: 210px; padding: 7px 10px; color: #d6dae8;
   }
   th.task-col img { width: 17px; height: 17px; vertical-align: -4px; margin-right: 8px; }
+  th.task-col { cursor: grab; }
+  th.task-col:active { cursor: grabbing; }
+  .grip { color: #3f4763; margin-right: 7px; font-size: 12px; letter-spacing: -1px; }
+  th.task-col:hover .grip { color: var(--teal); }
+  tr.dragging { opacity: .4; }
+  /* The insertion line shows which side of the hovered row the drop lands on. */
+  th.task-col.drop-above { box-shadow: inset 0 2px 0 0 var(--teal); }
+  th.task-col.drop-below { box-shadow: inset 0 -2px 0 0 var(--teal); }
 
   thead th.char-col {
     background: #1b2233; font-size: 12px; white-space: nowrap; font-weight: 600;
@@ -102,7 +110,12 @@
   tr.section .eye::after {
     content: ""; position: absolute; right: 2px; top: 2px;
     width: 9px; height: 9px; border-radius: 50%; background: #dfe7f5;
+    transition: all .12s;
   }
+  tr.section .eye.off { background: #39405a; }
+  tr.section .eye.off::after { right: 15px; }
+  tr.section th[data-section] { cursor: pointer; user-select: none; }
+  tr.section th[data-section]:hover { background: #0c1018; }
 
   /* Row tints per section, as in the source: dailies dark, weeklies purple. */
   tr.tint-weekly td { background: #241f33; }
@@ -373,6 +386,8 @@ function defaultState() {
     // and a newly imported character inherits the full eligible set.
     charTasks: {},
     seeded: false,
+    // Collapsed checklist sections, keyed "freq|scope".
+    collapsed: {},
     resetHour: 6,
     resetDay: 3,          // Wednesday
     lastDaily: 0,
@@ -638,14 +653,16 @@ function addTasks(predicate, label) {
     });
     added++;
   }
-  orderTasks();
+  // Deliberately not re-sorted: new tasks go on the end so a hand-arranged
+  // order survives adding more.
   save();
   render();
   toast(added ? added + " " + label + " added" : "Already added");
 }
 
-// Keep the grid in a stable, readable order: dailies first, then weeklies,
-// character-scope before roster-scope, then by the level they unlock at.
+// The initial ordering only — dailies first, then weeklies, character-scope
+// before roster-scope, then by unlock level. Applied once at seed time; after
+// that the array order is whatever you have dragged it into.
 function orderTasks() {
   const freqRank = { daily: 0, weekly: 1, biweekly: 2 };
   state.tasks.sort((a, b) =>
@@ -690,7 +707,9 @@ const SECTIONS = [
 ];
 
 function taskLabel(t) {
-  return '<th class="task-col">' +
+  // The whole label cell is the drag handle; the grip just advertises it.
+  return '<th class="task-col" draggable="true" data-drag-task="' + t.id + '">' +
+    '<span class="grip" title="Drag to reorder">⠿</span>' +
     (t.icon ? '<img src="' + ICON_BASE + esc(t.icon) + '" alt="" loading="lazy">' : "") +
     esc(t.name) + "</th>";
 }
@@ -735,8 +754,13 @@ function renderChecklist() {
       // fills with rows of dashes for content nobody is at the level for.
       (t.scope === "roster" || chars.some((c) => enabledFor(t, c))));
     if (!tasks.length) continue;
-    html += '<tr class="section"><th colspan="' + (chars.length + 1) + '">' +
-      '<span class="eye"></span>' + sec.label + "</th></tr>";
+    const key = sec.freq + "|" + sec.scope;
+    const shut = !!state.collapsed[key];
+    html += '<tr class="section"><th colspan="' + (chars.length + 1) + '"' +
+      ' data-section="' + key + '" title="Click to ' + (shut ? "show" : "hide") + ' this section">' +
+      '<span class="eye' + (shut ? " off" : "") + '"></span>' + sec.label +
+      (shut ? ' <span class="muted">(' + tasks.length + " hidden)</span>" : "") + "</th></tr>";
+    if (shut) continue;
 
     const tint = sec.freq !== "daily" ? " tint-weekly" : "";
     for (const t of tasks) {
@@ -1030,6 +1054,14 @@ view.addEventListener("click", (e) => {
   const cell = t.closest("button.cell");
   if (cell) { bumpCell(cell, 1); return; }
 
+  const band = t.closest("tr.section th[data-section]");
+  if (band) {
+    const key = band.dataset.section;
+    if (state.collapsed[key]) delete state.collapsed[key];
+    else state.collapsed[key] = true;
+    save(); render(); return;
+  }
+
   if (t.id === "add-endgame") { addTasks((c) => c.min >= 1680, "endgame raids"); return; }
   if (t.id === "add-dailies") { addTasks((c) => c.min < 1680 && c.max === 9999, "tasks"); return; }
   if (t.id === "add-all") { addTasks(() => true, "tasks"); return; }
@@ -1117,6 +1149,75 @@ view.addEventListener("click", (e) => {
     };
     picker.click();
   }
+});
+
+/* ---------- drag to reorder ---------- */
+
+let dragTaskId = null;
+
+const sameSection = (a, b) => a && b && a.freq === b.freq && a.scope === b.scope;
+
+view.addEventListener("dragstart", (e) => {
+  const handle = e.target.closest("[data-drag-task]");
+  if (!handle) return;
+  dragTaskId = handle.dataset.dragTask;
+  handle.closest("tr").classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  // Firefox refuses to start a drag unless some data is set.
+  e.dataTransfer.setData("text/plain", dragTaskId);
+});
+
+view.addEventListener("dragover", (e) => {
+  if (!dragTaskId) return;
+  const handle = e.target.closest("[data-drag-task]");
+  if (!handle || handle.dataset.dragTask === dragTaskId) return;
+
+  // Rows are grouped into sections when rendered, so moving a task between
+  // sections could not show up. Only offer a drop inside its own section.
+  const dragged = state.tasks.find((t) => t.id === dragTaskId);
+  const target = state.tasks.find((t) => t.id === handle.dataset.dragTask);
+  if (!sameSection(dragged, target)) return;
+
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".drop-above, .drop-below").forEach((el) =>
+    el.classList.remove("drop-above", "drop-below"));
+  const box = handle.getBoundingClientRect();
+  const below = e.clientY > box.top + box.height / 2;
+  handle.classList.add(below ? "drop-below" : "drop-above");
+});
+
+view.addEventListener("drop", (e) => {
+  if (!dragTaskId) return;
+  const handle = e.target.closest("[data-drag-task]");
+  if (!handle) return;
+  e.preventDefault();
+
+  const targetId = handle.dataset.dragTask;
+  const dragged = state.tasks.find((t) => t.id === dragTaskId);
+  const target = state.tasks.find((t) => t.id === targetId);
+  if (!sameSection(dragged, target) || dragTaskId === targetId) return;
+
+  const box = handle.getBoundingClientRect();
+  const after = e.clientY > box.top + box.height / 2;
+
+  const from = state.tasks.findIndex((t) => t.id === dragTaskId);
+  state.tasks.splice(from, 1);
+  // Recompute the target index after the removal, or the item lands one slot
+  // off whenever it was dragged downwards.
+  const to = state.tasks.findIndex((t) => t.id === targetId);
+  state.tasks.splice(after ? to + 1 : to, 0, dragged);
+
+  dragTaskId = null;
+  save();
+  render();
+});
+
+view.addEventListener("dragend", () => {
+  dragTaskId = null;
+  document.querySelectorAll(".dragging").forEach((el) => el.classList.remove("dragging"));
+  document.querySelectorAll(".drop-above, .drop-below").forEach((el) =>
+    el.classList.remove("drop-above", "drop-below"));
 });
 
 // Right-click steps a counter back instead of opening the browser menu.
