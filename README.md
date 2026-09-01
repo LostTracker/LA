@@ -9,7 +9,7 @@ schedule, plus a gold-tracking dashboard.
 
 | Piece | State |
 |---|---|
-| D1 database | **Live.** `roster-watch-db` (`e63040b0-8df9-472c-a8c6-578eb98ab42f`), schema applied |
+| D1 database | **Live.** `losttracker-db` (`55ddd07a-8180-42f2-ae61-b39c0e4096be`), schema applied |
 | Worker API | **Not deployed.** No `losttracker-api` Worker exists in the account yet |
 | Frontend | **Not in repo.** Exists only as a chat artifact; needs to be added here |
 | Discord OAuth app | Registration pending (Client ID + Secret) |
@@ -24,18 +24,25 @@ schedule, plus a gold-tracking dashboard.
 
 ## Deploying
 
-There is no Node on this machine, so `wrangler` cannot run locally. Either:
+Node 24 LTS is installed, so wrangler runs locally and `wrangler.toml` already points at
+the real database:
 
-1. **Install Node**, then `npx wrangler deploy` works straight from this directory
-   (`wrangler.toml` is already pointed at the real database), or
-2. **Use the Cloudflare dashboard** — Workers & Pages > Create Worker, paste `worker.js`,
-   bind D1 as `DB` to `roster-watch-db`, and set the Discord secrets there.
+```
+npx wrangler login                                              # once
+npx wrangler deploy                                             # deploy the Worker
+npx wrangler tail                                               # live logs
+npx wrangler d1 execute losttracker-db --remote --file=schema.sql
+```
 
-Never paste the Discord Client Secret into a chat — set it as a Worker secret directly.
+Set the Discord secrets as Worker secrets, never in source or a chat:
+
+```
+npx wrangler secret put DISCORD_CLIENT_SECRET
+```
 
 ## Notes
 
 - Task names, raid names, and gold values are intentionally not baked in — Lost Ark's
   raid lineup and gold rewards change with patches. They're configured in the app's Setup tab.
-- The database is still named `roster-watch-db` from an earlier working name. D1 has no
-  rename, so it either stays as a cosmetic mismatch or gets recreated as `losttracker-db`.
+- The old `roster-watch-db` (`e63040b0-...`) from the earlier working name still exists in
+  the account, unused and empty. It can be deleted once nothing references it.

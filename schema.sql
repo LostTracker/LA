@@ -1,6 +1,6 @@
 -- LostTracker D1 schema
--- Live in Cloudflare D1: roster-watch-db (e63040b0-8df9-472c-a8c6-578eb98ab42f)
--- Dumped from sqlite_master on 2026-09-01 — this file mirrors what is actually deployed.
+-- Live in Cloudflare D1: losttracker-db (55ddd07a-8180-42f2-ae61-b39c0e4096be)
+-- This file mirrors what is actually deployed.
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
