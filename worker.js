@@ -80,6 +80,60 @@ function keyMatches(supplied, expected) {
  * Class is deliberately not extracted: the roster listing renders it as an
  * unlabeled inline SVG. Class doesn't change anyway, so it's set by hand once.
  */
+/**
+ * Lifts the class icon out of a roster entry.
+ *
+ * lostark.bible draws it as an inline SVG with no name or sprite reference, so
+ * the markup itself is the only way to get it. That markup is third-party, so
+ * it is reduced to a known-safe subset here and the client renders it through
+ * an <img> data URI, where scripts cannot run even if something slipped past.
+ */
+const SVG_TAGS = new Set([
+  "svg", "path", "g", "circle", "ellipse", "rect", "polygon", "polyline", "line",
+]);
+const SVG_ATTRS = new Set([
+  "viewbox", "width", "height", "d", "fill", "stroke", "stroke-width", "stroke-linecap",
+  "stroke-linejoin", "transform", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1",
+  "x2", "y2", "points", "fill-rule", "clip-rule", "opacity",
+]);
+// Attributes whose canonical spelling is not all-lowercase.
+const ATTR_CASE = { viewbox: "viewBox" };
+
+function sanitiseSvg(markup) {
+  if (!markup) return null;
+  // Drop anything that can execute or pull in remote content outright.
+  if (/<\s*(script|foreignobject|image|use|style|animate)/i.test(markup)) return null;
+
+  let ok = true;
+  const cleaned = markup.replace(/<\s*(\/?)([a-zA-Z][\w-]*)([^>]*)>/g, (all, slash, tag, attrs) => {
+    const name = tag.toLowerCase();
+    if (!SVG_TAGS.has(name)) { ok = false; return ""; }
+    if (slash) return "</" + name + ">";
+
+    const kept = [];
+    const attrRe = /([a-zA-Z_:][\w:.-]*)\s*=\s*"([^"]*)"/g;
+    let m;
+    while ((m = attrRe.exec(attrs)) !== null) {
+      const key = m[1].toLowerCase();
+      let value = m[2];
+      if (!SVG_ATTRS.has(key)) continue;
+      if (/url\s*\(|javascript:/i.test(value)) continue;
+      // currentColor has nothing to inherit from inside an <img>, so the icon
+      // would render invisible. Pin it to a concrete colour.
+      if (/^currentcolor$/i.test(value)) value = "#cfd6e6";
+      // SVG attribute names are case-sensitive: viewBox lowercased is ignored
+      // by the renderer and the icon loses its scaling.
+      kept.push(ATTR_CASE[key] || key);
+      kept[kept.length - 1] += '="' + value.replace(/"/g, "&quot;") + '"';
+    }
+    if (name === "svg") kept.unshift('xmlns="http://www.w3.org/2000/svg"');
+    return "<" + name + (kept.length ? " " + kept.join(" ") : "") + ">";
+  });
+
+  if (!ok || !/^<svg/i.test(cleaned) || cleaned.length > 20000) return null;
+  return cleaned;
+}
+
 function parseRoster(html, region) {
   const out = [];
   const seen = new Set();
@@ -103,7 +157,12 @@ function parseRoster(html, region) {
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ name, ilvl: Number(ilvl[1]) });
+
+    // The class icon is the last SVG inside the entry.
+    const svgs = match[2].match(/<svg[\s\S]*?<\/svg>/gi);
+    const classIcon = svgs ? sanitiseSvg(svgs[svgs.length - 1]) : null;
+
+    out.push({ name, ilvl: Number(ilvl[1]), classIcon });
   }
   return out;
 }

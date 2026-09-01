@@ -94,6 +94,7 @@
     padding: 8px 10px; min-width: 108px; text-align: center; color: #e8ecf7;
   }
   thead th.char-col img { width: 20px; height: 20px; vertical-align: -5px; margin-right: 5px; opacity: .85; }
+  .class-icon { vertical-align: -5px; margin-right: 6px; filter: brightness(1.6); }
   thead th.char-col .ilvl { color: #aab3c9; font-weight: 400; }
   thead th.char-col .gold-flag { color: var(--gold); }
 
@@ -325,13 +326,24 @@ const TASK_CATALOGUE = [
   { name: "Thaemine G4", icon: "legion_raid.png", freq: "biweekly", scope: "character", reps: 1, min: 1620, max: 9999 },
   { name: "Echidna", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1620, max: 9999 },
   { name: "Behemoth", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1620, max: 9999 },
-  { name: "Aegir", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1660, max: 9999 },
-  { name: "Brelshaza Chapter 2", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1670, max: 9999 },
-  { name: "Mordum", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 3, min: 1680, max: 9999 },
-  { name: "Horizon Cathedral", icon: "abyssal-dungeon.webp", freq: "weekly", scope: "character", reps: 2, min: 1700, max: 9999 },
-  { name: "Armoche", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1700, max: 9999 },
-  { name: "Kazeros", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1710, max: 9999 },
-  { name: "Serca", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1710, max: 9999 },
+  // Current-tier raids: gate counts, entry item levels and difficulty tiers are
+  // Neria's, which are more accurate than lostark-helper's for this content.
+  // `gold` on a mode is the total for the whole raid, matching how Neria states
+  // it; a partly-cleared raid earns that pro rata across its gates.
+  { name: "Aegir", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1680, max: 9999,
+    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 18000 }] },
+  { name: "Brelshaza Chapter 2", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1690, max: 9999,
+    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 23000 }] },
+  { name: "Mordum", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 3, min: 1700, max: 9999,
+    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 27000 }] },
+  { name: "Armoche", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1720, max: 9999,
+    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 42000 }] },
+  { name: "Kazeros", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1730, max: 9999,
+    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 35000 }] },
+  { name: "Serca", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1740, max: 9999,
+    modes: [{ name: "Matching", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 0 }, { name: "Nightmare", gold: 37000 }] },
+  { name: "Horizon Cathedral", icon: "abyssal-dungeon.webp", freq: "weekly", scope: "character", reps: 2, min: 1750, max: 9999,
+    modes: [{ name: "Level 1", gold: 0 }, { name: "Level 2", gold: 0 }, { name: "Level 3", gold: 34000 }] },
 
   // --- Weekly, whole roster
   { name: "South Vern Chaos Line Dungeon", icon: "dungeon.webp", freq: "weekly", scope: "roster", reps: 2, min: 1340, max: 9999 },
@@ -362,7 +374,10 @@ const DEFAULT_MODES = () => [
   { name: "Nightmare", gold: 0 },
 ];
 // Short codes for the grid, matching the shorthand Neria uses.
-const MODE_CODE = { Normal: "N", Hard: "H", Nightmare: "NM", Extreme: "X", Solo: "S" };
+const MODE_CODE = {
+  Normal: "N", Hard: "H", Nightmare: "NM", Extreme: "X", Solo: "S", Matching: "MM",
+  "Level 1": "L1", "Level 2": "L2", "Level 3": "L3",
+};
 const modeCode = (name) => MODE_CODE[name] || name.slice(0, 2).toUpperCase();
 
 const modesOf = (t) => (Array.isArray(t.modes) && t.modes.length ? t.modes : DEFAULT_MODES());
@@ -495,6 +510,8 @@ function defaultState() {
     charMode: {},
     // Banked rest bonus, keyed "taskId:characterId".
     rest: {},
+    // When the roster was last pulled from lostark.bible (epoch seconds).
+    lastImport: 0,
     resetHour: 6,
     resetDay: 3,          // Wednesday
     lastDaily: 0,
@@ -614,10 +631,12 @@ function goldTotals() {
     if (!isTracked(t) || !isGoldTask(t)) continue;
     for (const ch of goldChars()) {
       if (!enabledFor(t, ch)) continue;
+      // Mode gold is the whole raid's payout, so partial clears earn it pro
+      // rata across the gates rather than per-gate.
       const gold = Number(modeFor(t, ch.id).gold) || 0;
       if (!gold) continue;
-      earned += gold * progressOf(t.id, ch.id);
-      potential += gold * t.reps;
+      earned += Math.round(gold * (Math.min(progressOf(t.id, ch.id), t.reps) / t.reps));
+      potential += gold;
     }
   }
   return { earned, potential };
@@ -673,9 +692,28 @@ function normaliseScopes(s) {
 
     if (ref.days) t.days = ref.days; else delete t.days;
     if (ref.rest) t.rest = ref.rest; else delete t.rest;
-    if (isGoldTask(t) && (!Array.isArray(t.modes) || !t.modes.length)) t.modes = DEFAULT_MODES();
-    if (!isGoldTask(t)) delete t.modes;
     delete t.gold; // superseded by per-difficulty amounts
+
+    // Gate counts and entry levels are catalogue facts, so corrections to them
+    // reach state saved under the old numbers.
+    t.reps = ref.reps;
+    t.min = ref.min;
+    t.max = ref.max;
+
+    if (!isGoldTask(t)) { delete t.modes; continue; }
+
+    const wanted = ref.modes || DEFAULT_MODES();
+    const current = Array.isArray(t.modes) ? t.modes : [];
+    const sameShape = current.length === wanted.length &&
+      wanted.every((m, i) => current[i] && current[i].name === m.name);
+    if (!sameShape) {
+      // Tier list changed: adopt the new one but carry over any amount already
+      // entered against a tier of the same name.
+      t.modes = wanted.map((m) => {
+        const prior = current.find((c) => c.name === m.name);
+        return { name: m.name, gold: prior && prior.gold ? prior.gold : m.gold };
+      });
+    }
 
     if (t.scope !== ref.scope) {
       // Progress was keyed by the old scope, so drop this task's counters
@@ -724,19 +762,27 @@ function save() {
 
 /* ---------- roster import ---------- */
 
-async function importRoster() {
-  if (!configured()) { toast("Set the API URL and key on Setup first"); return; }
-  const name = (state.bibleName || "").trim();
-  if (!name) { toast("Enter a character name to import from"); return; }
+// Rendered through an <img> data URI: the markup comes from lostark.bible, and
+// this way it cannot execute anything even though the Worker already stripped it.
+function classIconImg(ch, size) {
+  if (!ch.classIcon) return "";
+  return '<img class="class-icon" style="width:' + size + "px;height:" + size + 'px" alt="" ' +
+    'src="data:image/svg+xml;utf8,' + encodeURIComponent(ch.classIcon) + '">';
+}
 
-  toast("Importing…");
+async function importRoster(quiet) {
+  if (!configured()) { if (!quiet) toast("Set the API URL and key on Setup first"); return; }
+  const name = (state.bibleName || "").trim();
+  if (!name) { if (!quiet) toast("Enter a character name to import from"); return; }
+
+  if (!quiet) toast("Importing…");
   let body;
   try {
     const res = await api("/api/roster?name=" + encodeURIComponent(name) +
       "&region=" + encodeURIComponent(state.bibleRegion));
     body = await res.json();
-    if (!res.ok) { toast(body.error || "Import failed (" + res.status + ")"); return; }
-  } catch (err) { toast("Could not reach the API"); return; }
+    if (!res.ok) { if (!quiet) toast(body.error || "Import failed (" + res.status + ")"); return; }
+  } catch (err) { if (!quiet) toast("Could not reach the API"); return; }
 
   let added = 0, updated = 0;
   for (const inc of body.characters) {
@@ -744,15 +790,21 @@ async function importRoster() {
     if (existing) {
       if (String(existing.ilvl) !== String(inc.ilvl)) updated++;
       existing.ilvl = inc.ilvl;
+      if (inc.classIcon) existing.classIcon = inc.classIcon;
     } else {
-      state.characters.push({ id: uid(), name: inc.name, cls: "", ilvl: inc.ilvl, countsGold: false });
+      state.characters.push({
+        id: uid(), name: inc.name, cls: "", ilvl: inc.ilvl,
+        classIcon: inc.classIcon || null, countsGold: false,
+      });
       added++;
     }
   }
+  state.lastImport = Math.floor(Date.now() / 1000);
   state.characters.sort((a, b) => (Number(b.ilvl) || 0) - (Number(a.ilvl) || 0));
   save();
   render();
-  toast(added + " added, " + updated + " updated");
+  if (!quiet) toast(added + " added, " + updated + " updated");
+  else if (added || updated) toast("Roster refreshed: " + added + " added, " + updated + " updated");
 }
 
 /* ---------- task presets ---------- */
@@ -765,7 +817,8 @@ function addTasks(predicate, label) {
     state.tasks.push({
       id: uid(), name: c.name, icon: c.icon, freq: c.freq, scope: c.scope,
       reps: c.reps, min: c.min, max: c.max, tracked: true,
-      days: c.days, rest: c.rest, modes: isGoldTask(c) ? DEFAULT_MODES() : undefined,
+      days: c.days, rest: c.rest,
+      modes: isGoldTask(c) ? (c.modes ? c.modes.map((m) => ({ ...m })) : DEFAULT_MODES()) : undefined,
     });
     added++;
   }
@@ -874,7 +927,7 @@ function renderChecklist() {
   let html = '<div class="panel"><div class="grid-wrap"><table class="grid"><thead><tr>' +
     '<th class="task-col">Task</th>';
   for (const c of chars) {
-    html += '<th class="char-col">' + esc(c.name) +
+    html += '<th class="char-col">' + classIconImg(c, 20) + esc(c.name) +
       ' <span class="ilvl">[' + esc(c.ilvl || "?") + "]</span>" +
       (c.countsGold ? ' <span class="gold-flag" title="Counts toward gold">✓</span>' : "") + "</th>";
   }
@@ -970,7 +1023,8 @@ function renderDashboard() {
       let sum = 0;
       for (const t of state.tasks) {
         if (!isTracked(t) || !isGoldTask(t) || !enabledFor(t, ch)) continue;
-        sum += (Number(modeFor(t, ch.id).gold) || 0) * progressOf(t.id, ch.id);
+        const gold = Number(modeFor(t, ch.id).gold) || 0;
+        sum += Math.round(gold * (Math.min(progressOf(t.id, ch.id), t.reps) / t.reps));
       }
       html += "<tr><td>" + esc(ch.name) + '</td><td class="num" style="color:var(--gold)">' +
         sum.toLocaleString() + "</td></tr>";
@@ -1055,6 +1109,7 @@ function renderRoster() {
       const on = eligible.filter((t) => enabledFor(t, c)).length;
 
       html += '<div class="row" data-char="' + c.id + '">' +
+        classIconImg(c, 24) +
         '<input type="text" class="grow" value="' + esc(c.name) + '" data-field="name" placeholder="Name">' +
         '<input type="text" value="' + esc(c.cls || "") + '" data-field="cls" placeholder="Class" style="width:140px">' +
         '<input type="text" value="' + esc(c.ilvl || "") + '" data-field="ilvl" placeholder="Item level" style="width:100px">' +
@@ -1511,7 +1566,8 @@ view.addEventListener("change", (e) => {
       state.tasks.push({
         id: uid(), name: c.name, icon: c.icon, freq: c.freq, scope: c.scope,
         reps: c.reps, min: c.min, max: c.max, tracked: true,
-      days: c.days, rest: c.rest, modes: isGoldTask(c) ? DEFAULT_MODES() : undefined,
+      days: c.days, rest: c.rest,
+      modes: isGoldTask(c) ? (c.modes ? c.modes.map((m) => ({ ...m })) : DEFAULT_MODES()) : undefined,
       });
     }
     orderTasks();
@@ -1523,6 +1579,13 @@ view.addEventListener("change", (e) => {
   if (!state.lastWeekly) state.lastWeekly = lastWeeklyBoundary(state.resetDay, state.resetHour);
   if (applyResets()) save();
   render();
+
+  // Refresh item levels from lostark.bible in the background, at most hourly so
+  // opening the page repeatedly does not hammer their site. Quiet: it only
+  // speaks up if something actually changed.
+  const HOUR = 3600;
+  const stale = !state.lastImport || Math.floor(Date.now() / 1000) - state.lastImport > HOUR;
+  if (configured() && state.bibleName && stale) importRoster(true);
 
   setInterval(() => {
     if (applyResets()) { save(); render(); toast("Reset applied"); }
