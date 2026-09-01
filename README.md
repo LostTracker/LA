@@ -11,7 +11,7 @@ schedule, plus a gold-tracking dashboard.
 |---|---|
 | D1 database | **Live.** `losttracker-db` (`55ddd07a-8180-42f2-ae61-b39c0e4096be`), schema applied |
 | Worker API | **Written, builds clean, not yet deployed.** Needs the Discord credentials first |
-| Frontend | **Not in repo.** Exists only as a chat artifact; needs to be added here |
+| Frontend | **Built.** `index.html`, works standalone; syncs once an API URL is set |
 | Discord OAuth app | Registration pending (Client ID + Secret) |
 | LOA Logs importer | Not started; needs a real `encounters.db` to design against |
 
@@ -39,7 +39,7 @@ cookie to reject forged callbacks.
 - `worker.js` — the API: Discord OAuth + state persistence
 - `schema.sql` — mirrors the schema actually deployed to D1
 - `wrangler.toml` — Worker config, bound to the live database
-- `index.html` — the single-file frontend (to be added)
+- `index.html` — the single-file frontend: Checklist, Dashboard, Roster, Setup
 
 ## Deploying
 

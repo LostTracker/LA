@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LostTracker</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #131a30;
+    --panel-2: #182142;
+    --line: #23305c;
+    --text: #e6ebff;
+    --muted: #8e9ac4;
+    --gold: #e8b84b;
+    --teal: #3fd0c9;
+    --danger: #ef6a6a;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 14px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .brand { font-size: 19px; font-weight: 700; letter-spacing: .3px; }
+  .brand span { color: var(--gold); }
+
+  nav { display: flex; gap: 4px; }
+
+  nav button {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--muted);
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font: inherit;
+  }
+  nav button:hover { color: var(--text); background: var(--panel-2); }
+  nav button[aria-selected="true"] {
+    color: var(--text);
+    background: var(--panel-2);
+    border-color: var(--line);
+  }
+
+  .spacer { flex: 1; }
+
+  .account { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+
+  main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 18px;
+  }
+
+  .panel > h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+
+  button.btn {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 13px;
+    cursor: pointer;
+    font: inherit;
+  }
+  button.btn:hover { border-color: var(--teal); }
+  button.btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  button.btn.primary { background: var(--teal); border-color: var(--teal); color: #04212a; font-weight: 600; }
+
+  input[type="text"], input[type="number"], select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font: inherit;
+  }
+  input:focus, select:focus { outline: 2px solid var(--teal); outline-offset: -1px; }
+
+  /* ---- checklist grid ---- */
+
+  .grid-wrap { overflow-x: auto; }
+
+  table.grid { border-collapse: collapse; width: 100%; }
+
+  table.grid th, table.grid td {
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    text-align: center;
+  }
+
+  table.grid th.row-label {
+    text-align: left;
+    font-weight: 500;
+    white-space: nowrap;
+    position: sticky;
+    left: 0;
+    background: var(--panel);
+    z-index: 1;
+    min-width: 190px;
+  }
+
+  table.grid thead th {
+    background: var(--panel-2);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  table.grid thead th small { display: block; color: var(--muted); font-weight: 400; }
+
+  tr.section-row th {
+    background: var(--panel-2);
+    text-align: left;
+    color: var(--gold);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+  }
+
+  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--teal); cursor: pointer; }
+
+  td.done { background: rgba(63, 208, 201, .09); }
+
+  .gate {
+    width: 34px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--muted);
+    cursor: pointer;
+    font: 600 12px/1 inherit;
+  }
+  .gate[data-state="1"] { background: rgba(63, 208, 201, .18); border-color: var(--teal); color: var(--teal); }
+  .gate[data-state="2"] { background: rgba(232, 184, 75, .18); border-color: var(--gold); color: var(--gold); }
+
+  /* ---- dashboard ---- */
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .card .label { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .card .value { font-size: 27px; font-weight: 700; margin-top: 4px; }
+  .card .value.gold { color: var(--gold); }
+  .card .value.teal { color: var(--teal); }
+  .card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .bar { height: 7px; background: var(--bg); border-radius: 4px; overflow: hidden; margin-top: 9px; }
+  .bar > i { display: block; height: 100%; background: var(--teal); }
+  .bar.gold > i { background: var(--gold); }
+
+  ul.outstanding { list-style: none; margin: 0; padding: 0; }
+  ul.outstanding li {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  ul.outstanding li:last-child { border-bottom: 0; }
+  ul.outstanding .who { font-weight: 600; }
+  ul.outstanding .what { color: var(--muted); font-size: 13px; text-align: right; }
+
+  /* ---- lists (roster / setup) ---- */
+
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .row:last-of-type { border-bottom: 0; }
+  .row .grow { flex: 1; min-width: 120px; }
+
+  .add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+  .muted { color: var(--muted); }
+  .empty { color: var(--muted); font-style: italic; padding: 10px 0; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+
+  .gate-row { margin-left: 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity .2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Lost<span>Tracker</span></div>
+  <nav id="tabs">
+    <button data-tab="checklist" aria-selected="true">Checklist</button>
+    <button data-tab="dashboard" aria-selected="false">Dashboard</button>
+    <button data-tab="roster" aria-selected="false">Roster</button>
+    <button data-tab="setup" aria-selected="false">Setup</button>
+  </nav>
+  <div class="spacer"></div>
+  <div class="account" id="account"></div>
+</header>
+
+<main id="view"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   LostTracker — single-file frontend.
+
+   Works standalone with no backend: state lives in localStorage
+   until an API base URL is configured on the Setup tab, at which
+   point it syncs to the Worker instead and follows your Discord
+   sign-in.
+   ============================================================ */
+
+const LS_STATE = "losttracker.state";
+const LS_API = "losttracker.api";
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+let state = null;
+let user = null;          // signed-in Discord user, or null
+let activeTab = "checklist";
+let saveTimer = null;
+
+/* ---------- utilities ---------- */
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Touching localStorage throws outright on an opaque origin (opened via file:// in
+// some browsers, private windows, or with site data blocked), so every access is
+// guarded and falls back to memory. The app still runs; it just forgets on reload.
+const memory = new Map();
+const store = {
+  get(key) {
+    try { return localStorage.getItem(key); } catch (err) { return memory.get(key) ?? null; }
+  },
+  set(key, value) {
+    memory.set(key, value);
+    try { localStorage.setItem(key, value); } catch (err) { /* memory only */ }
+  },
+  remove(key) {
+    memory.delete(key);
+    try { localStorage.removeItem(key); } catch (err) { /* memory only */ }
+  },
+};
+
+const apiBase = () => (store.get(LS_API) || "").replace(/\/+$/, "");
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+function defaultState() {
+  return {
+    version: 1,
+    characters: [],
+    dailyTasks: [],
+    weeklyTasks: [],
+    raids: [],
+    // Flat maps keyed "characterId:itemId" so adding or removing either side
+    // never has to migrate a nested structure.
+    daily: {},
+    weekly: {},
+    gates: {},
+    resetHour: 6,
+    resetDay: 3, // Wednesday
+    lastDaily: 0,
+    lastWeekly: 0,
+  };
+}
+
+/* ---------- reset scheduling ---------- */
+
+function lastDailyBoundary(hour) {
+  const now = new Date();
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0, 0);
+  if (b > now) b.setDate(b.getDate() - 1);
+  return b.getTime();
+}
+
+function lastWeeklyBoundary(day, hour) {
+  const now = new Date();
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0, 0);
+  // Walk back to the most recent occurrence of that weekday at that hour.
+  for (let i = 0; i < 14 && (b.getDay() !== day || b > now); i++) {
+    b.setDate(b.getDate() - 1);
+  }
+  return b.getTime();
+}
+
+// Clears anything whose reset boundary has passed since the last time we looked.
+// Returns true if something was cleared, so the caller knows to persist.
+function applyResets() {
+  let changed = false;
+  const daily = lastDailyBoundary(state.resetHour);
+  const weekly = lastWeeklyBoundary(state.resetDay, state.resetHour);
+
+  if (state.lastDaily < daily) {
+    state.daily = {};
+    state.lastDaily = daily;
+    changed = true;
+  }
+  if (state.lastWeekly < weekly) {
+    state.weekly = {};
+    state.gates = {};
+    state.lastWeekly = weekly;
+    changed = true;
+  }
+  return changed;
+}
+
+function nextBoundary(kind) {
+  const d = new Date(kind === "daily"
+    ? lastDailyBoundary(state.resetHour)
+    : lastWeeklyBoundary(state.resetDay, state.resetHour));
+  d.setDate(d.getDate() + (kind === "daily" ? 1 : 7));
+  return d;
+}
+
+function untilText(date) {
+  let mins = Math.max(0, Math.round((date - Date.now()) / 60000));
+  const days = Math.floor(mins / 1440);
+  mins -= days * 1440;
+  const hours = Math.floor(mins / 60);
+  mins -= hours * 60;
+  if (days) return days + "d " + hours + "h";
+  if (hours) return hours + "h " + mins + "m";
+  return mins + "m";
+}
+
+/* ---------- persistence ---------- */
+
+async function loadState() {
+  const base = apiBase();
+
+  if (base) {
+    try {
+      const meRes = await fetch(base + "/api/me", { credentials: "include" });
+      if (meRes.ok) {
+        user = (await meRes.json()).user;
+        const stateRes = await fetch(base + "/api/state", { credentials: "include" });
+        if (stateRes.ok) {
+          const body = await stateRes.json();
+          state = { ...defaultState(), ...(body.data || {}) };
+          return;
+        }
+      }
+    } catch (err) {
+      // Worker unreachable — fall through to local storage rather than
+      // blocking the app on a backend that is optional.
+      toast("Could not reach the API — working locally");
+    }
+  }
+
+  try {
+    state = { ...defaultState(), ...JSON.parse(store.get(LS_STATE) || "{}") };
+  } catch (err) {
+    state = defaultState();
+  }
+}
+
+function save() {
+  // Debounced: checkbox spamming shouldn't mean a request per click.
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    store.set(LS_STATE, JSON.stringify(state));
+    const base = apiBase();
+    if (!base || !user) return;
+    try {
+      const res = await fetch(base + "/api/state", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(state),
+      });
+      if (!res.ok) toast("Save failed (" + res.status + ")");
+    } catch (err) {
+      toast("Save failed — offline?");
+    }
+  }, 600);
+}
+
+/* ---------- derived numbers ---------- */
+
+const goldChars = () => state.characters.filter((c) => c.countsGold);
+
+function gateGold(gate, gateState) {
+  if (gateState === 1) return Number(gate.goldNormal) || 0;
+  if (gateState === 2) return Number(gate.goldHard) || 0;
+  return 0;
+}
+
+function goldTotals() {
+  let earned = 0;
+  let potential = 0;
+  for (const ch of goldChars()) {
+    for (const raid of state.raids) {
+      for (const gate of raid.gates) {
+        earned += gateGold(gate, state.gates[ch.id + ":" + gate.id] || 0);
+        potential += Math.max(Number(gate.goldNormal) || 0, Number(gate.goldHard) || 0);
+      }
+    }
+  }
+  return { earned, potential };
+}
+
+function completion() {
+  let done = 0;
+  let total = 0;
+  for (const ch of state.characters) {
+    for (const t of state.dailyTasks) {
+      total++;
+      if (state.daily[ch.id + ":" + t.id]) done++;
+    }
+    for (const t of state.weeklyTasks) {
+      total++;
+      if (state.weekly[ch.id + ":" + t.id]) done++;
+    }
+    for (const raid of state.raids) {
+      for (const gate of raid.gates) {
+        total++;
+        if (state.gates[ch.id + ":" + gate.id]) done++;
+      }
+    }
+  }
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
+/* ---------- rendering ---------- */
+
+function render() {
+  document.querySelectorAll("#tabs button").forEach((b) => {
+    b.setAttribute("aria-selected", String(b.dataset.tab === activeTab));
+  });
+  renderAccount();
+  const view = document.getElementById("view");
+  view.innerHTML = ({
+    checklist: renderChecklist,
+    dashboard: renderDashboard,
+    roster: renderRoster,
+    setup: renderSetup,
+  }[activeTab])();
+}
+
+function renderAccount() {
+  const el = document.getElementById("account");
+  if (!apiBase()) {
+    el.innerHTML = '<span title="Set an API URL on the Setup tab to sync across devices">Local only</span>';
+  } else if (user) {
+    el.innerHTML = "<span>" + esc(user.username) + "</span>" +
+      '<button class="btn" id="logout">Sign out</button>';
+  } else {
+    el.innerHTML = '<button class="btn primary" id="login">Sign in with Discord</button>';
+  }
+}
+
+function renderChecklist() {
+  if (!state.characters.length) {
+    return '<div class="panel"><p class="empty">No characters yet. Add some on the Roster tab.</p></div>';
+  }
+  const hasTasks = state.dailyTasks.length || state.weeklyTasks.length || state.raids.length;
+  if (!hasTasks) {
+    return '<div class="panel"><p class="empty">No tasks defined yet. Add dailies, weeklies, and raids on the Setup tab.</p></div>';
+  }
+
+  const chars = state.characters;
+  let html = '<div class="panel"><div class="grid-wrap"><table class="grid"><thead><tr>' +
+    '<th class="row-label">Task</th>';
+  for (const c of chars) {
+    html += "<th>" + esc(c.name) +
+      (c.cls || c.ilvl ? "<small>" + esc([c.cls, c.ilvl].filter(Boolean).join(" · ")) + "</small>" : "") +
+      "</th>";
+  }
+  html += "</tr></thead><tbody>";
+
+  const checkRows = (tasks, kind) => {
+    let out = "";
+    for (const t of tasks) {
+      out += '<tr><th class="row-label">' + esc(t.name) + "</th>";
+      for (const c of chars) {
+        const key = c.id + ":" + t.id;
+        const on = !!state[kind][key];
+        out += '<td class="' + (on ? "done" : "") + '">' +
+          '<input type="checkbox" data-kind="' + kind + '" data-key="' + key + '"' +
+          (on ? " checked" : "") + ' aria-label="' + esc(t.name + " — " + c.name) + '"></td>';
+      }
+      out += "</tr>";
+    }
+    return out;
+  };
+
+  if (state.dailyTasks.length) {
+    html += '<tr class="section-row"><th colspan="' + (chars.length + 1) + '">Daily</th></tr>';
+    html += checkRows(state.dailyTasks, "daily");
+  }
+  if (state.weeklyTasks.length) {
+    html += '<tr class="section-row"><th colspan="' + (chars.length + 1) + '">Weekly</th></tr>';
+    html += checkRows(state.weeklyTasks, "weekly");
+  }
+
+  for (const raid of state.raids) {
+    if (!raid.gates.length) continue;
+    html += '<tr class="section-row"><th colspan="' + (chars.length + 1) + '">' + esc(raid.name) + "</th></tr>";
+    for (const gate of raid.gates) {
+      html += '<tr><th class="row-label">' + esc(gate.name) + "</th>";
+      for (const c of chars) {
+        const key = c.id + ":" + gate.id;
+        const st = state.gates[key] || 0;
+        html += "<td>" +
+          '<button class="gate" data-gate="' + key + '" data-state="' + st + '"' +
+          ' title="Click to cycle: not cleared, Normal, Hard"' +
+          ' aria-label="' + esc(gate.name + " — " + c.name) + '">' +
+          (st === 0 ? "–" : st === 1 ? "N" : "H") + "</button></td>";
+      }
+      html += "</tr>";
+    }
+  }
+
+  html += "</tbody></table></div></div>";
+  return html;
+}
+
+function renderDashboard() {
+  const { earned, potential } = goldTotals();
+  const { done, total, pct } = completion();
+  const goldPct = potential ? Math.round((earned / potential) * 100) : 0;
+
+  let html = '<div class="cards">' +
+    '<div class="card"><div class="label">Weekly gold</div>' +
+      '<div class="value gold">' + earned.toLocaleString() + "</div>" +
+      '<div class="sub">of ' + potential.toLocaleString() + " potential · " + goldPct + "%</div>" +
+      '<div class="bar gold"><i style="width:' + goldPct + '%"></i></div></div>' +
+    '<div class="card"><div class="label">Completion</div>' +
+      '<div class="value teal">' + pct + "%</div>" +
+      '<div class="sub">' + done + " of " + total + " done</div>" +
+      '<div class="bar"><i style="width:' + pct + '%"></i></div></div>' +
+    '<div class="card"><div class="label">Daily reset</div>' +
+      '<div class="value">' + untilText(nextBoundary("daily")) + "</div>" +
+      '<div class="sub">every day at ' + state.resetHour + ":00</div></div>" +
+    '<div class="card"><div class="label">Weekly reset</div>' +
+      '<div class="value">' + untilText(nextBoundary("weekly")) + "</div>" +
+      '<div class="sub">' + DAYS[state.resetDay] + " at " + state.resetHour + ":00</div></div>" +
+    "</div>";
+
+  html += '<div class="panel"><h2>Still outstanding today</h2>';
+  if (!state.characters.length) {
+    html += '<p class="empty">No characters yet.</p>';
+  } else {
+    let any = false;
+    let rows = '<ul class="outstanding">';
+    for (const c of state.characters) {
+      const left = state.dailyTasks.filter((t) => !state.daily[c.id + ":" + t.id]);
+      if (!left.length) continue;
+      any = true;
+      rows += '<li><span class="who">' + esc(c.name) + "</span>" +
+        '<span class="what">' + left.map((t) => esc(t.name)).join(", ") + "</span></li>";
+    }
+    rows += "</ul>";
+    html += any ? rows : '<p class="empty">Everything done. Nice.</p>';
+  }
+  html += "</div>";
+
+  html += '<div class="panel"><h2>Gold by character</h2>';
+  const gc = goldChars();
+  if (!gc.length) {
+    html += '<p class="empty">No characters are marked as counting toward weekly gold. Set that on the Roster tab.</p>';
+  } else {
+    html += '<ul class="outstanding">';
+    for (const c of gc) {
+      let sum = 0;
+      for (const raid of state.raids) {
+        for (const gate of raid.gates) sum += gateGold(gate, state.gates[c.id + ":" + gate.id] || 0);
+      }
+      html += '<li><span class="who">' + esc(c.name) + "</span>" +
+        '<span class="what" style="color:var(--gold)">' + sum.toLocaleString() + " g</span></li>";
+    }
+    html += "</ul>";
+  }
+  html += "</div>";
+  return html;
+}
+
+function renderRoster() {
+  let html = '<div class="panel"><h2>Characters</h2>' +
+    '<p class="hint">"Counts gold" marks the characters whose raid rewards feed the weekly gold total — ' +
+    "Lost Ark caps that at six, but this doesn't enforce a number.</p>";
+
+  if (!state.characters.length) {
+    html += '<p class="empty">No characters yet.</p>';
+  } else {
+    for (const c of state.characters) {
+      html += '<div class="row" data-char="' + c.id + '">' +
+        '<input type="text" class="grow" value="' + esc(c.name) + '" data-field="name" placeholder="Name">' +
+        '<input type="text" value="' + esc(c.cls || "") + '" data-field="cls" placeholder="Class" style="width:150px">' +
+        '<input type="text" value="' + esc(c.ilvl || "") + '" data-field="ilvl" placeholder="Item level" style="width:110px">' +
+        '<label class="muted"><input type="checkbox" data-field="countsGold"' +
+          (c.countsGold ? " checked" : "") + "> counts gold</label>" +
+        '<button class="btn danger" data-remove-char="' + c.id + '">Remove</button></div>';
+    }
+  }
+
+  html += '<div class="add-row">' +
+    '<input type="text" id="new-char" placeholder="Character name" class="grow">' +
+    '<button class="btn primary" id="add-char">Add character</button></div></div>';
+  return html;
+}
+
+function renderSetup() {
+  const simpleList = (list, kind, label) => {
+    let out = '<div class="panel"><h2>' + label + "</h2>";
+    if (!list.length) {
+      out += '<p class="empty">Nothing defined yet.</p>';
+    } else {
+      for (const t of list) {
+        out += '<div class="row" data-task="' + t.id + '" data-list="' + kind + '">' +
+          '<input type="text" class="grow" value="' + esc(t.name) + '" data-field="name">' +
+          '<button class="btn danger" data-remove-task="' + t.id + '" data-list="' + kind + '">Remove</button></div>';
+      }
+    }
+    out += '<div class="add-row"><input type="text" class="grow" data-new="' + kind + '" placeholder="Task name">' +
+      '<button class="btn primary" data-add="' + kind + '">Add</button></div></div>';
+    return out;
+  };
+
+  let html = "";
+  html += '<div class="panel"><h2>Resets</h2>' +
+    '<p class="hint">Uses this device\'s local time. Progress clears automatically when a boundary passes.</p>' +
+    '<div class="row"><label class="grow">Daily reset hour ' +
+      '<input type="number" id="reset-hour" min="0" max="23" value="' + state.resetHour + '" style="width:80px"></label>' +
+    '<label class="grow">Weekly reset day <select id="reset-day">' +
+      DAYS.map((d, i) => '<option value="' + i + '"' + (i === state.resetDay ? " selected" : "") + ">" + d + "</option>").join("") +
+    "</select></label></div>" +
+    '<div class="add-row"><button class="btn" id="reset-daily">Reset dailies now</button>' +
+    '<button class="btn" id="reset-weekly">Reset weeklies + raids now</button></div></div>';
+
+  html += simpleList(state.dailyTasks, "dailyTasks", "Daily tasks");
+  html += simpleList(state.weeklyTasks, "weeklyTasks", "Weekly tasks");
+
+  html += '<div class="panel"><h2>Raids &amp; gates</h2>' +
+    '<p class="hint">Gold values are yours to fill in — Lost Ark\'s raid lineup and rewards shift with patches, ' +
+    "so nothing is baked in here.</p>";
+  if (!state.raids.length) {
+    html += '<p class="empty">No raids defined yet.</p>';
+  } else {
+    for (const raid of state.raids) {
+      html += '<div class="row" data-raid="' + raid.id + '">' +
+        '<input type="text" class="grow" value="' + esc(raid.name) + '" data-field="name" placeholder="Raid name">' +
+        '<button class="btn danger" data-remove-raid="' + raid.id + '">Remove raid</button></div>';
+      for (const gate of raid.gates) {
+        html += '<div class="gate-row" data-raid="' + raid.id + '" data-gate="' + gate.id + '">' +
+          '<input type="text" value="' + esc(gate.name) + '" data-field="name" placeholder="Gate" style="width:180px">' +
+          '<label class="muted">Normal <input type="number" min="0" value="' + (gate.goldNormal || 0) +
+            '" data-field="goldNormal" style="width:90px"></label>' +
+          '<label class="muted">Hard <input type="number" min="0" value="' + (gate.goldHard || 0) +
+            '" data-field="goldHard" style="width:90px"></label>' +
+          '<button class="btn danger" data-remove-gate="' + gate.id + '" data-raid="' + raid.id + '">Remove</button></div>';
+      }
+      html += '<div class="gate-row"><input type="text" data-new-gate="' + raid.id + '" placeholder="Gate name" style="width:180px">' +
+        '<button class="btn" data-add-gate="' + raid.id + '">Add gate</button></div>';
+    }
+  }
+  html += '<div class="add-row"><input type="text" id="new-raid" class="grow" placeholder="Raid name">' +
+    '<button class="btn primary" id="add-raid">Add raid</button></div></div>';
+
+  html += '<div class="panel"><h2>Sync</h2>' +
+    '<p class="hint">Leave this empty to keep everything in this browser. Point it at the deployed ' +
+    "losttracker-api Worker to sync across devices behind a Discord sign-in.</p>" +
+    '<div class="add-row"><input type="text" id="api-url" class="grow" placeholder="https://losttracker-api.<subdomain>.workers.dev" value="' +
+      esc(apiBase()) + '">' +
+    '<button class="btn primary" id="save-api">Save</button></div>' +
+    '<div class="add-row"><button class="btn" id="export">Export JSON</button>' +
+    '<button class="btn" id="import">Import JSON</button></div></div>';
+
+  return html;
+}
+
+/* ---------- events ---------- */
+
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-tab]");
+  if (!btn) return;
+  activeTab = btn.dataset.tab;
+  render();
+});
+
+document.getElementById("account").addEventListener("click", async (e) => {
+  if (e.target.id === "login") {
+    window.location.href = apiBase() + "/auth/login";
+  }
+  if (e.target.id === "logout") {
+    try {
+      await fetch(apiBase() + "/auth/logout", { method: "POST", credentials: "include" });
+    } catch (err) { /* signing out locally is enough */ }
+    user = null;
+    render();
+  }
+});
+
+const view = document.getElementById("view");
+
+view.addEventListener("click", (e) => {
+  const t = e.target;
+
+  // ---- checklist gates: cycle none -> Normal -> Hard -> none
+  const gateBtn = t.closest("button[data-gate]");
+  if (gateBtn && gateBtn.classList.contains("gate")) {
+    const key = gateBtn.dataset.gate;
+    const next = ((state.gates[key] || 0) + 1) % 3;
+    if (next === 0) delete state.gates[key];
+    else state.gates[key] = next;
+    gateBtn.dataset.state = next;
+    gateBtn.textContent = next === 0 ? "–" : next === 1 ? "N" : "H";
+    save();
+    return;
+  }
+
+  // ---- roster
+  if (t.id === "add-char") {
+    const input = document.getElementById("new-char");
+    const name = input.value.trim();
+    if (!name) return;
+    state.characters.push({ id: uid(), name, cls: "", ilvl: "", countsGold: true });
+    save();
+    render();
+    return;
+  }
+  if (t.dataset.removeChar) {
+    const id = t.dataset.removeChar;
+    state.characters = state.characters.filter((c) => c.id !== id);
+    // Drop that character's progress so it can't be resurrected by a re-add.
+    for (const map of ["daily", "weekly", "gates"]) {
+      for (const key of Object.keys(state[map])) {
+        if (key.startsWith(id + ":")) delete state[map][key];
+      }
+    }
+    save();
+    render();
+    return;
+  }
+
+  // ---- setup: tasks
+  if (t.dataset.add) {
+    const kind = t.dataset.add;
+    const input = view.querySelector('[data-new="' + kind + '"]');
+    const name = input.value.trim();
+    if (!name) return;
+    state[kind].push({ id: uid(), name });
+    save();
+    render();
+    return;
+  }
+  if (t.dataset.removeTask) {
+    const kind = t.dataset.list;
+    const id = t.dataset.removeTask;
+    state[kind] = state[kind].filter((x) => x.id !== id);
+    const map = kind === "dailyTasks" ? "daily" : "weekly";
+    for (const key of Object.keys(state[map])) {
+      if (key.endsWith(":" + id)) delete state[map][key];
+    }
+    save();
+    render();
+    return;
+  }
+
+  // ---- setup: raids and gates
+  if (t.id === "add-raid") {
+    const input = document.getElementById("new-raid");
+    const name = input.value.trim();
+    if (!name) return;
+    state.raids.push({ id: uid(), name, gates: [] });
+    save();
+    render();
+    return;
+  }
+  if (t.dataset.removeRaid) {
+    const raid = state.raids.find((r) => r.id === t.dataset.removeRaid);
+    if (raid) {
+      for (const gate of raid.gates) {
+        for (const key of Object.keys(state.gates)) {
+          if (key.endsWith(":" + gate.id)) delete state.gates[key];
+        }
+      }
+    }
+    state.raids = state.raids.filter((r) => r.id !== t.dataset.removeRaid);
+    save();
+    render();
+    return;
+  }
+  if (t.dataset.addGate) {
+    const raid = state.raids.find((r) => r.id === t.dataset.addGate);
+    const input = view.querySelector('[data-new-gate="' + t.dataset.addGate + '"]');
+    const name = input.value.trim();
+    if (!raid || !name) return;
+    raid.gates.push({ id: uid(), name, goldNormal: 0, goldHard: 0 });
+    save();
+    render();
+    return;
+  }
+  if (t.dataset.removeGate) {
+    const raid = state.raids.find((r) => r.id === t.dataset.raid);
+    if (raid) raid.gates = raid.gates.filter((g) => g.id !== t.dataset.removeGate);
+    for (const key of Object.keys(state.gates)) {
+      if (key.endsWith(":" + t.dataset.removeGate)) delete state.gates[key];
+    }
+    save();
+    render();
+    return;
+  }
+
+  // ---- setup: manual resets
+  if (t.id === "reset-daily") {
+    state.daily = {};
+    save();
+    toast("Dailies cleared");
+    render();
+    return;
+  }
+  if (t.id === "reset-weekly") {
+    state.weekly = {};
+    state.gates = {};
+    save();
+    toast("Weeklies and raids cleared");
+    render();
+    return;
+  }
+
+  // ---- setup: sync + import/export
+  if (t.id === "save-api") {
+    const url = document.getElementById("api-url").value.trim().replace(/\/+$/, "");
+    if (url) store.set(LS_API, url);
+    else store.remove(LS_API);
+    toast("Saved — reloading");
+    setTimeout(() => window.location.reload(), 600);
+    return;
+  }
+  if (t.id === "export") {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "losttracker-backup.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return;
+  }
+  if (t.id === "import") {
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "application/json";
+    picker.onchange = async () => {
+      const file = picker.files[0];
+      if (!file) return;
+      try {
+        state = { ...defaultState(), ...JSON.parse(await file.text()) };
+        applyResets();
+        save();
+        render();
+        toast("Imported");
+      } catch (err) {
+        toast("That file isn't valid LostTracker JSON");
+      }
+    };
+    picker.click();
+  }
+});
+
+view.addEventListener("change", (e) => {
+  const t = e.target;
+
+  // ---- checklist checkboxes
+  if (t.dataset.kind && t.dataset.key) {
+    if (t.checked) state[t.dataset.kind][t.dataset.key] = true;
+    else delete state[t.dataset.kind][t.dataset.key];
+    t.closest("td").classList.toggle("done", t.checked);
+    save();
+    return;
+  }
+
+  // ---- reset schedule
+  if (t.id === "reset-hour") {
+    const h = Math.min(23, Math.max(0, parseInt(t.value, 10) || 0));
+    state.resetHour = h;
+    // Re-anchor so changing the hour doesn't instantly trip a reset.
+    state.lastDaily = lastDailyBoundary(h);
+    state.lastWeekly = lastWeeklyBoundary(state.resetDay, h);
+    save();
+    render();
+    return;
+  }
+  if (t.id === "reset-day") {
+    state.resetDay = parseInt(t.value, 10);
+    state.lastWeekly = lastWeeklyBoundary(state.resetDay, state.resetHour);
+    save();
+    render();
+    return;
+  }
+
+  // ---- inline field edits (roster, tasks, gates)
+  const field = t.dataset.field;
+  if (!field) return;
+
+  const charRow = t.closest("[data-char]");
+  if (charRow) {
+    const c = state.characters.find((x) => x.id === charRow.dataset.char);
+    if (c) c[field] = field === "countsGold" ? t.checked : t.value;
+    save();
+    return;
+  }
+
+  const gateRow = t.closest("[data-gate][data-raid]");
+  if (gateRow) {
+    const raid = state.raids.find((r) => r.id === gateRow.dataset.raid);
+    const gate = raid && raid.gates.find((g) => g.id === gateRow.dataset.gate);
+    if (gate) gate[field] = field === "name" ? t.value : Math.max(0, parseInt(t.value, 10) || 0);
+    save();
+    return;
+  }
+
+  const raidRow = t.closest("[data-raid]:not([data-gate])");
+  if (raidRow) {
+    const raid = state.raids.find((r) => r.id === raidRow.dataset.raid);
+    if (raid) raid[field] = t.value;
+    save();
+    return;
+  }
+
+  const taskRow = t.closest("[data-task]");
+  if (taskRow) {
+    const list = state[taskRow.dataset.list];
+    const task = list && list.find((x) => x.id === taskRow.dataset.task);
+    if (task) task[field] = t.value;
+    save();
+  }
+});
+
+/* ---------- boot ---------- */
+
+(async function init() {
+  await loadState();
+  if (!state.lastDaily) state.lastDaily = lastDailyBoundary(state.resetHour);
+  if (!state.lastWeekly) state.lastWeekly = lastWeeklyBoundary(state.resetDay, state.resetHour);
+  if (applyResets()) save();
+  render();
+
+  // Catch a reset boundary passing while the page is left open.
+  setInterval(() => {
+    if (applyResets()) {
+      save();
+      render();
+      toast("Reset applied");
+    } else if (activeTab === "dashboard") {
+      render();
+    }
+  }, 60000);
+})();
+</script>
+</body>
+</html>
