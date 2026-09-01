@@ -331,19 +331,19 @@ const TASK_CATALOGUE = [
   // `gold` on a mode is the total for the whole raid, matching how Neria states
   // it; a partly-cleared raid earns that pro rata across its gates.
   { name: "Aegir", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1680, max: 9999,
-    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 18000 }] },
+    modes: [{ name: "Solo", gold: 12000 }, { name: "Normal", gold: 12000 }, { name: "Hard", gold: 18000 }] },
   { name: "Brelshaza Chapter 2", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1690, max: 9999,
-    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 23000 }] },
+    modes: [{ name: "Solo", gold: 17000 }, { name: "Normal", gold: 17000 }, { name: "Hard", gold: 23000 }] },
   { name: "Mordum", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 3, min: 1700, max: 9999,
-    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 27000 }] },
+    modes: [{ name: "Solo", gold: 21000 }, { name: "Normal", gold: 21000 }, { name: "Hard", gold: 27000 }] },
   { name: "Armoche", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1720, max: 9999,
-    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 42000 }] },
+    modes: [{ name: "Solo", gold: 33000 }, { name: "Normal", gold: 33000 }, { name: "Hard", gold: 42000 }] },
   { name: "Kazeros", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1730, max: 9999,
-    modes: [{ name: "Solo", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 35000 }] },
+    modes: [{ name: "Solo", gold: 27000 }, { name: "Normal", gold: 27000 }, { name: "Hard", gold: 35000 }] },
   { name: "Serca", icon: "kazeros-raid.webp", freq: "weekly", scope: "character", reps: 2, min: 1740, max: 9999,
-    modes: [{ name: "Matching", gold: 0 }, { name: "Normal", gold: 0 }, { name: "Hard", gold: 0 }, { name: "Nightmare", gold: 37000 }] },
+    modes: [{ name: "Matching", gold: 24000 }, { name: "Normal", gold: 24000 }, { name: "Hard", gold: 30000 }, { name: "Nightmare", gold: 37000 }] },
   { name: "Horizon Cathedral", icon: "abyssal-dungeon.webp", freq: "weekly", scope: "character", reps: 2, min: 1750, max: 9999,
-    modes: [{ name: "Level 1", gold: 0 }, { name: "Level 2", gold: 0 }, { name: "Level 3", gold: 34000 }] },
+    modes: [{ name: "Level 1", gold: 20000 }, { name: "Level 2", gold: 27000 }, { name: "Level 3", gold: 34000 }] },
 
   // --- Weekly, whole roster
   { name: "South Vern Chaos Line Dungeon", icon: "dungeon.webp", freq: "weekly", scope: "roster", reps: 2, min: 1340, max: 9999 },
@@ -712,6 +712,12 @@ function normaliseScopes(s) {
       t.modes = wanted.map((m) => {
         const prior = current.find((c) => c.name === m.name);
         return { name: m.name, gold: prior && prior.gold ? prior.gold : m.gold };
+      });
+    } else {
+      // Same tiers: fill in amounts the catalogue now knows but this state
+      // still has blank, without overwriting anything typed in by hand.
+      t.modes.forEach((m, i) => {
+        if (!Number(m.gold) && Number(wanted[i].gold)) m.gold = wanted[i].gold;
       });
     }
 
